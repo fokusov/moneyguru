@@ -40,7 +40,7 @@ enum {
     PSMTab_PositionSingleMask		= 1 << 7
 };
 
-@interface PSMTabBarControl : NSControl <NSTabViewDelegate>
+@interface PSMTabBarControl : NSControl <NSTabViewDelegate, NSDraggingSource>
 {
     
     // control basics
@@ -84,7 +84,6 @@ enum {
 - (void)setCanCloseOnlyTab:(BOOL)value;
 - (id<PSMTabStyle>)style;
 - (NSString *)styleName;
-- (void)setStyleNamed:(NSString *)name;
 - (BOOL)hideForSingleTab;
 - (void)setHideForSingleTab:(BOOL)value;
 - (BOOL)showAddTabButton;

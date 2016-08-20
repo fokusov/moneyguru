@@ -1,6 +1,4 @@
-# Created By: Virgil Dupras
-# Created On: 2008-02-15
-# Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
+# Copyright 2016 Virgil Dupras
 #
 # This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
 # which should be included with this package. The terms are also available at
@@ -12,13 +10,14 @@ import re
 from itertools import groupby
 from operator import attrgetter
 
-from hscommon.currency import Currency
 from hscommon.util import nonone, flatten, stripfalse, dedupe
+from hscommon.trans import tr
 
 from ..exception import FileFormatError
 from ..model.account import Account, Group, AccountList, GroupList, AccountType
-from ..model.amount import parse_amount
+from ..model.amount import parse_amount, of_currency, UnsupportedCurrencyError
 from ..model.budget import Budget
+from ..model.currency import Currency
 from ..model.oven import Oven
 from ..model.recurrence import Recurrence, Spawn
 from ..model.transaction import Transaction, Split
@@ -64,6 +63,9 @@ class Loader:
     NATIVE_DATE_FORMAT = None
     # Some extra date formats to try before standard date guessing order
     EXTRA_DATE_FORMATS = None
+    # Whether we fail with a ``FileFormatError`` when encountering an unsupported currency or we
+    # fall back to the default currency
+    STRICT_CURRENCY = False
 
     def __init__(self, default_currency, default_date_format=None):
         self.default_currency = default_currency
@@ -96,7 +98,7 @@ class Loader:
         # self.parse_date_str as a default value
         self.parsing_date_format = self.NATIVE_DATE_FORMAT
 
-    #--- Virtual
+    # --- Virtual
     def _parse(self, infile):
         """Parse infile and raise FileFormatError if infile is not the right format. Don't bother
         with an exception message, app.MoneyGuru will re-raise it with a message if needed.
@@ -114,7 +116,7 @@ class Loader:
         """
         pass
 
-    #--- Protected
+    # --- Protected
     def clean_date(self, str_date):
         # return str_date without garbage around (such as timestamps) or None if impossible
         match = re_possibly_a_date.search(str_date)
@@ -210,7 +212,7 @@ class Loader:
             self.budget_infos.append(self.budget_info)
         self.budget_info = BudgetInfo()
 
-    #--- Public
+    # --- Public
     def parse(self, filename):
         """Parses 'filename' and raises FileFormatError if appropriate."""
         try:
@@ -223,9 +225,17 @@ class Loader:
         except IOError:
             raise FileFormatError()
 
-    @staticmethod
-    def parse_amount(string, currency):
-        return parse_amount(string, currency, with_expression=False)
+    @classmethod
+    def parse_amount(cls, string, currency):
+        try:
+            return parse_amount(
+                string, currency, with_expression=False, strict_currency=cls.STRICT_CURRENCY
+            )
+        except UnsupportedCurrencyError as e:
+            msg = tr(
+                "Unsupported currency: {}. Aborting load. Did you disable a currency plugin?"
+            ).format(e.currency)
+            raise FileFormatError(msg)
 
     def load(self):
         """Loads the parsed info into self.accounts and self.transactions.
@@ -247,7 +257,10 @@ class Loader:
                 memo = nonone(split_info.memo, '')
                 split = Split(transaction, account, amount)
                 split.memo = memo
-                if split_info.reconciliation_date is not None:
+                if account is None or not of_currency(amount, account.currency):
+                    # fix #442: off-currency transactions shouldn't be reconciled
+                    split.reconciliation_date = None
+                elif split_info.reconciliation_date is not None:
                     split.reconciliation_date = split_info.reconciliation_date
                 elif split_info.reconciled: # legacy
                     split.reconciliation_date = transaction.date
@@ -288,6 +301,7 @@ class Loader:
                 self.budget_infos.append(BudgetInfo(info.name, info.budget_target, info.budget))
             account.reference = info.reference
             account.account_number = info.account_number
+            account.inactive = info.inactive
             account.notes = info.notes
             currencies.add(account.currency)
             self.accounts.add(account)
@@ -384,6 +398,7 @@ class AccountInfo:
         self.reference = None
         self.balance = None
         self.account_number = ''
+        self.inactive = False
         self.notes = ''
 
     def __repr__(self):

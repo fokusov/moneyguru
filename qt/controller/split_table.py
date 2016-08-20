@@ -6,7 +6,7 @@
 # which should be included with this package. The terms are also available at 
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import Qt, QMimeData, QByteArray
+from PyQt5.QtCore import Qt, QMimeData, QByteArray
 
 from qtlib.column import Column
 from .table import Table, ACCOUNT_EDIT
@@ -33,7 +33,7 @@ class SplitTable(Table):
         flags = Table._getFlags(self, row, column)
         return flags | Qt.ItemIsDragEnabled
     
-    #--- Drag & Drop
+    # --- Drag & Drop
     def dropMimeData(self, mimeData, action, row, column, parentIndex):
         if not mimeData.hasFormat(MIME_INDEX):
             return False
@@ -57,7 +57,7 @@ class SplitTable(Table):
     def supportedDropActions(self):
         return Qt.MoveAction
     
-    #--- Event Handlers
+    # --- Event Handlers
     def keyPressed(self, event):
         # return
         if (event.key() == Qt.Key_Down) and (self.model.selected_index == len(self.model)-1):

@@ -33,7 +33,7 @@ class TransactionTable(TransactionTableBase):
         Column('mtime', display=trcol('Modification Time'), visible=False, optional=True),
     ]
 
-    #--- Override
+    # --- Override
     def _do_add(self):
         transactions = self.mainwindow.selected_transactions
         date = transactions[0].date if transactions else datetime.date.today()
@@ -54,15 +54,18 @@ class TransactionTable(TransactionTableBase):
             self.document.delete_transactions(transactions)
 
     def _fill(self):
+        self._all_amounts_are_native = True
         total_amount = 0
         for transaction in self.parent_view.visible_transactions:
             self.append(TransactionTableRow(self, transaction))
             convert = lambda a: convert_amount(a, self.document.default_currency, transaction.date)
             total_amount += convert(transaction.amount)
+            if not self.document.is_amount_native(transaction.amount):
+                self._all_amounts_are_native = False
         self.footer = TotalRow(self, self.document.date_range.end, total_amount)
-        self._restore_from_explicit_selection()
+        self._restore_from_explicit_selection(refresh_view=False)
 
-    #--- Private
+    # --- Private
     def _show_account(self, row_index=None, use_to_column=False):
         # if `use_to_column` is True, use the To column, else, use the From column
         if row_index is None:
@@ -75,7 +78,7 @@ class TransactionTable(TransactionTableBase):
         account_to_show = splits[0].account
         self.mainwindow.open_account(account_to_show)
 
-    #--- Public
+    # --- Public
     def select_transactions(self, transactions):
         TransactionTableBase.select_transactions(self, transactions)
         if self and not self.selected_indexes:
@@ -87,12 +90,12 @@ class TransactionTable(TransactionTableBase):
     def show_to_account(self, row_index=None):
         self._show_account(row_index, use_to_column=True)
 
-    #--- Properties
+    # --- Properties
     @property
     def selected_transactions(self):
         return [row.transaction for row in self.selected_rows if hasattr(row, 'transaction')]
 
-    #--- Event handlers
+    # --- Event handlers
     def date_range_changed(self):
         self.refresh(refresh_view=False)
         self._update_selection()
@@ -141,7 +144,7 @@ class TransactionTableRow(Row, RowWithDateMixIn):
                 continue
             yield TransactionTableRow(self.table, transaction)
 
-    #--- Public
+    # --- Public
     def can_edit(self):
         return not self.is_budget
 
@@ -200,7 +203,7 @@ class TransactionTableRow(Row, RowWithDateMixIn):
         else:
             return Row.sort_key_for_column(self, column_name)
 
-    #--- Properties
+    # --- Properties
     # The "get" part of those properies below are called *very* often, hence, the format caching
 
     description = rowattr('_description', 'description')

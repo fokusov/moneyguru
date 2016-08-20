@@ -6,8 +6,8 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QPixmap
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QPixmap
 
 from qtlib.column import Column
 from ...support.item_delegate import ItemDecoration
@@ -57,7 +57,7 @@ class EntryTable(TableWithTransactions):
         self.view.spacePressed.connect(self.model.toggle_reconciled)
         self.view.deletePressed.connect(self.model.delete)
 
-    #--- Data methods override
+    # --- Data methods override
     def _getStatusData(self, row, role):
         # DecorationRole is handled in TableWithTransactions
         if role == Qt.CheckStateRole:

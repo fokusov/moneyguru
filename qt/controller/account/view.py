@@ -6,8 +6,8 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import Qt
-from PyQt4.QtGui import (
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QSizePolicy, QPushButton, QAbstractItemView, QStackedWidget,
     QSplitter
 )
@@ -21,14 +21,14 @@ from qtlib.util import horizontalSpacer
 from ...support.item_view import TableView
 from ...support.line_graph_view import LineGraphView
 from ...support.bar_graph_view import BarGraphView
-from ..base_view import BaseView
+from ..base_transaction_view import BaseTransactionView
 from ..chart import Chart
 from .filter_bar import EntryFilterBar
 from .table import EntryTable
 
 tr = trget('ui')
 
-class EntryView(BaseView):
+class EntryView(BaseTransactionView):
     def _setup(self):
         self._setupUi()
         self.etable = EntryTable(self.model.etable, view=self.tableView)
@@ -43,7 +43,7 @@ class EntryView(BaseView):
         self.resize(483, 423)
         self.verticalLayout = QVBoxLayout(self)
         self.verticalLayout.setSpacing(0)
-        self.verticalLayout.setMargin(0)
+        self.verticalLayout.setContentsMargins(0, 0, 0, 0)
         self.horizontalLayout = QHBoxLayout()
         self.horizontalLayout.setSpacing(0)
         self.filterBar = RadioBox(self)
@@ -92,13 +92,13 @@ class EntryView(BaseView):
 
     def _setupColumns(self):
         h = self.tableView.horizontalHeader()
-        h.setMovable(True) # column drag & drop reorder
+        h.setSectionsMovable(True) # column drag & drop reorder
 
-    #--- QWidget override
+    # --- QWidget override
     def setFocus(self):
         self.etable.view.setFocus()
 
-    #--- Public
+    # --- Public
     def fitViewsForPrint(self, viewPrinter):
         hidden = self.model.mainwindow.hidden_areas
         viewPrinter.fitTable(self.etable)
@@ -112,7 +112,7 @@ class EntryView(BaseView):
             sizes = [splitterHeight-graphHeight, graphHeight]
             self.splitterView.setSizes(sizes)
 
-    #--- model --> view
+    # --- model --> view
     def refresh_reconciliation_button(self):
         if self.model.can_toggle_reconciliation_mode:
             self.reconciliationButton.setEnabled(True)

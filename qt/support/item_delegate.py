@@ -9,8 +9,8 @@
 
 from collections import namedtuple
 
-from PyQt4.QtCore import QRect, QSize
-from PyQt4.QtGui import QStyledItemDelegate, QStyleOptionViewItemV4, QStyle
+from PyQt5.QtCore import QRect, QSize
+from PyQt5.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem, QStyle
 
 # onClickCallable has the signature f(clicked_row_index: int).
 ItemDecoration = namedtuple('ItemDecoration', 'pixmap onClickCallable')
@@ -21,7 +21,7 @@ class ItemDelegate(QStyledItemDelegate):
         QStyledItemDelegate.__init__(self, *args, **kwargs)
         self._display_text = True
 
-    #--- Virtual
+    # --- Virtual
     def _get_decorations(self, index, isSelected):
         """Returns a list of ItemDecorations which are drawn during the paint event.
 
@@ -58,12 +58,7 @@ class ItemDelegate(QStyledItemDelegate):
         """
         return None
 
-    def _prepare_paint_options(self, option, index):
-        # Don't set option directly in `paint` but here. This way, there won't be any trouble with
-        # option being overwritten.
-        pass
-
-    #--- Overrides
+    # --- Overrides
 
     def displayText(self, p_object, locale):
         if self._display_text:
@@ -78,7 +73,7 @@ class ItemDelegate(QStyledItemDelegate):
         by the custom value_painter if it exists.
 
         Args:
-            option - QStyleOptionViewItemV4
+            option - QStyleOptionViewItem
             index - QModelIndex
 
         Returns:
@@ -107,6 +102,16 @@ class ItemDelegate(QStyledItemDelegate):
             currentRight -= pixmap.width()
         return False
 
+    def initStyleOption(self, option, index):
+        QStyledItemDelegate.initStyleOption(self, option, index)
+        decorations = self._get_decorations(index, bool(option.state & QStyle.State_Selected))
+        if decorations:
+            option.decorationPosition = QStyleOptionViewItem.Right
+            decorationWidth = sum(dec.pixmap.width() for dec in decorations)
+            decorationHeight = max(dec.pixmap.height() for dec in decorations)
+            option.decorationSize = QSize(decorationWidth, decorationHeight)
+            option.features |= QStyleOptionViewItem.HasDecoration
+
     def paint(self, painter, option, index):
         """Performs custom painting of value of data in the model and decorations.
 
@@ -115,22 +120,9 @@ class ItemDelegate(QStyledItemDelegate):
 
          Args:
             painter - QPainter
-            option - QStyleOptionViewItemV4
+            option - QStyleOptionViewItem
             index - QModelIndex
         """
-        self.initStyleOption(option, index)
-        # I don't know why I have to do this. option.version returns 4, but still, when I try to
-        # access option.features, boom-crash. The workaround is to force a V4.
-        option = QStyleOptionViewItemV4(option)
-        decorations = self._get_decorations(index, bool(option.state & QStyle.State_Selected))
-        if decorations:
-            option.decorationPosition = QStyleOptionViewItemV4.Right
-            decorationWidth = sum(dec.pixmap.width() for dec in decorations)
-            decorationHeight = max(dec.pixmap.height() for dec in decorations)
-            option.decorationSize = QSize(decorationWidth, decorationHeight)
-            option.features |= QStyleOptionViewItemV4.HasDecoration
-        self._prepare_paint_options(option, index)
-
         xOffset = 0
         # First added for #15, the painting of custom amount information.  This can
         # be used as a pattern for painting any column of information.
@@ -138,12 +130,13 @@ class ItemDelegate(QStyledItemDelegate):
         self._display_text = value_painter is None
         QStyledItemDelegate.paint(self, painter, option, index)
         if value_painter is not None:
-            value_option = QStyleOptionViewItemV4(option)
+            value_option = QStyleOptionViewItem(option)
             rect = value_option.rect
             rect = QRect(rect.left(), rect.top(), rect.width() - xOffset, rect.height())
             value_option.rect = rect
             value_painter.paint(painter, value_option, index)
 
+        decorations = self._get_decorations(index, bool(option.state & QStyle.State_Selected))
         for dec in decorations:
             pixmap = dec.pixmap
             x = option.rect.right() - pixmap.width() - xOffset

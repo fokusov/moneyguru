@@ -1,12 +1,11 @@
-# Created By: Virgil Dupras
-# Created On: 2008-07-06
-# Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
+# Copyright 2016 Virgil Dupras
 #
 # This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 import logging
+import weakref
 
 from hscommon.notify import Repeater
 from hscommon.util import first, minmax
@@ -16,7 +15,6 @@ from hscommon.gui.base import GUIObject
 from ..const import PaneType
 from ..document import FilterType
 from ..exception import OperationAborted, FileFormatError
-from ..model.budget import BudgetSpawn
 from ..model.date import inc_month, DateFormat
 from ..model.recurrence import Recurrence, RepeatType
 from ..loader import csv, qif, ofx, native
@@ -25,13 +23,7 @@ from .search_field import SearchField
 from .date_range_selector import DateRangeSelector
 from .account_lookup import AccountLookup
 from .completion_lookup import CompletionLookup
-from .account_panel import AccountPanel
-from .transaction_panel import TransactionPanel
-from .mass_edition_panel import MassEditionPanel
-from .budget_panel import BudgetPanel
-from .schedule_panel import SchedulePanel
 from .custom_date_range_panel import CustomDateRangePanel
-from .account_reassign_panel import AccountReassignPanel
 from .export_panel import ExportPanel
 from .import_window import ImportWindow
 from .csv_options import CSVOptions
@@ -43,6 +35,7 @@ from .schedule_view import ScheduleView
 from .budget_view import BudgetView
 from .general_ledger_view import GeneralLedgerView
 from .docprops_view import DocPropsView
+from .pluginlist_view import PluginListView
 from .empty_view import EmptyView
 
 PANETYPE2LABEL = {
@@ -53,6 +46,7 @@ PANETYPE2LABEL = {
     PaneType.Budget: tr("Budgets"),
     PaneType.GeneralLedger: tr("General Ledger"),
     PaneType.DocProps: tr("Document Properties"),
+    PaneType.PluginList: tr("Plugin Management"),
     PaneType.Empty: tr("New Tab"),
 }
 
@@ -79,8 +73,9 @@ class ViewPane:
 
 
 class MainWindow(Repeater, GUIObject):
-    #--- model -> view calls:
+    # --- model -> view calls:
     # change_current_pane()
+    # get_panel_view(model)
     # refresh_panes()
     # refresh_status_line()
     # refresh_undo_actions()
@@ -109,22 +104,13 @@ class MainWindow(Repeater, GUIObject):
         self.account_lookup = AccountLookup(self)
         self.completion_lookup = CompletionLookup(self)
 
-        self.account_panel = AccountPanel(self)
-        self.transaction_panel = TransactionPanel(self)
-        self.mass_edit_panel = MassEditionPanel(self)
-        self.budget_panel = BudgetPanel(self)
-        self.schedule_panel = SchedulePanel(self)
-        self.custom_daterange_panel = CustomDateRangePanel(self)
-        self.account_reassign_panel = AccountReassignPanel(self)
-        self.export_panel = ExportPanel(self)
-
         self.csv_options = CSVOptions(self)
         self.import_window = ImportWindow(self)
 
         msgs = MESSAGES_DOCUMENT_CHANGED | {'filter_applied', 'date_range_changed'}
         self.bind_messages(msgs, self._invalidate_visible_entries)
 
-    #--- Private
+    # --- Private
     def _add_pane(self, pane):
         self.panes.append(pane)
         self.view.refresh_panes()
@@ -184,6 +170,8 @@ class MainWindow(Repeater, GUIObject):
             result = GeneralLedgerView(self)
         elif pane_type == PaneType.DocProps:
             result = DocPropsView(self)
+        elif pane_type == PaneType.PluginList:
+            result = PluginListView(self)
         elif pane_type == PaneType.Empty:
             result = EmptyView(self)
         else:
@@ -197,7 +185,7 @@ class MainWindow(Repeater, GUIObject):
     def _perform_if_possible(self, action_name):
         current_view = self._current_pane.view
         if current_view.can_perform(action_name):
-            getattr(current_view, action_name)()
+            return getattr(current_view, action_name)()
 
     def _restore_default_panes(self):
         pane_types = [
@@ -240,7 +228,7 @@ class MainWindow(Repeater, GUIObject):
             if pane.account is not None:
                 data['account_name'] = pane.account.name
             if pane.view.VIEW_TYPE >= PaneType.Plugin:
-                data['plugin_name'] = pane.view.plugin.NAME
+                data['plugin_name'] = pane.view.plugin.plugin_id()
             opened_panes.append(data)
         logging.debug('Saving panes with data %r', opened_panes)
         self.document.set_default(Preference.OpenedPanes, opened_panes)
@@ -259,7 +247,7 @@ class MainWindow(Repeater, GUIObject):
         self.panes = []
         for pane_type, arg in pane_data:
             if pane_type >= PaneType.Plugin:
-                plugin = first(p for p in self.app.plugins if p.NAME == arg)
+                plugin = first(p for p in self.app.get_enabled_plugins() if p.plugin_id() == arg)
                 if plugin is not None:
                     self.panes.append(self._create_pane_from_plugin(plugin))
                 else:
@@ -312,7 +300,7 @@ class MainWindow(Repeater, GUIObject):
             entries = [e for e in entries if not e.reconciled]
         return entries
 
-    #--- Override
+    # --- Override
     def _view_updated(self):
         self.daterange_selector.refresh()
         self.daterange_selector.refresh_custom_ranges()
@@ -325,7 +313,7 @@ class MainWindow(Repeater, GUIObject):
         if not self.panes:
             self._restore_default_panes()
 
-    #--- Public
+    # --- Public
     def close_pane(self, index):
         if self.pane_count == 1: # don't close the last pane
             return
@@ -348,26 +336,22 @@ class MainWindow(Repeater, GUIObject):
             self.view.change_current_pane()
 
     def delete_item(self):
-        self._perform_if_possible('delete_item')
+        return self._perform_if_possible('delete_item')
 
     def duplicate_item(self):
-        self._perform_if_possible('duplicate_item')
+        return self._perform_if_possible('duplicate_item')
 
     def edit_item(self):
         try:
-            self._perform_if_possible('edit_item')
+            return self._perform_if_possible('edit_item')
         except OperationAborted:
             pass
 
-    def edit_selected_transactions(self):
-        editable_txns = [txn for txn in self.selected_transactions if not isinstance(txn, BudgetSpawn)]
-        if len(editable_txns) > 1:
-            self.mass_edit_panel.load()
-        elif len(editable_txns) == 1:
-            self.transaction_panel.load()
-
     def export(self):
-        self.export_panel.load()
+        accounts = [a for a in self.document.accounts if a.is_balance_sheet_account()]
+        panel = ExportPanel(self.document)
+        panel.view = weakref.proxy(self.view.get_panel_view(panel))
+        panel.load(accounts)
 
     def jump_to_account(self):
         self.account_lookup.show()
@@ -380,7 +364,7 @@ class MainWindow(Repeater, GUIObject):
         parsed data into model instances, ready to be shown in the Import window.
         """
         self.loader.load()
-        if self.loader.accounts and self.loader.transactions:
+        if any(a.is_balance_sheet_account() for a in self.loader.accounts) and self.loader.transactions:
             self.import_window.show()
         else:
             raise FileFormatError('This file does not contain any account to import.')
@@ -398,7 +382,7 @@ class MainWindow(Repeater, GUIObject):
             ref.date = inc_month(ref.date, 1)
             schedule = Recurrence(ref, RepeatType.Monthly, 1)
             self.selected_schedules = [schedule]
-            self.edit_item()
+            return self.edit_item()
 
     def move_down(self):
         self._perform_if_possible('move_down')
@@ -418,7 +402,7 @@ class MainWindow(Repeater, GUIObject):
 
     def new_item(self):
         try:
-            self._perform_if_possible('new_item')
+            return self._perform_if_possible('new_item')
         except OperationAborted as e:
             if e.message:
                 self.view.show_message(e.message)
@@ -508,9 +492,9 @@ class MainWindow(Repeater, GUIObject):
     def show_account(self):
         """Shows the currently selected account in the Account view.
 
-        If a sheet is selected, the selected account will be shown.
-        If the Transaction or Account view is selected, the related account (From, To, Transfer)
-        of the selected transaction will be shown.
+        This action has a different meaning depending on the active view. If a sheet is selected,
+        the selected account will be shown. If the Transaction or Account view is selected, the
+        related account (From, To, Transfer) of the selected transaction will be shown.
         """
         current_view = self._current_pane.view
         if hasattr(current_view, 'show_account'):
@@ -536,7 +520,7 @@ class MainWindow(Repeater, GUIObject):
             self._account2visibleentries[account] = self._visible_entries_for_account(account)
         return self._account2visibleentries[account]
 
-    #Column menu
+    # Column menu
     def column_menu_items(self):
         # Returns a list of (display_name, marked) items for each optional column in the current
         # view (marked means that it's visible).
@@ -549,7 +533,7 @@ class MainWindow(Repeater, GUIObject):
             return None
         self._current_pane.view.columns.toggle_menu_item(index)
 
-    #--- Properties
+    # --- Properties
     @property
     def current_pane_index(self):
         return self._current_pane_index
@@ -606,7 +590,7 @@ class MainWindow(Repeater, GUIObject):
     def status_line(self):
         return self._current_pane.view.status_line
 
-    #--- Event callbacks
+    # --- Event callbacks
     def _undo_stack_changed(self):
         self.view.refresh_undo_actions()
 
@@ -624,7 +608,9 @@ class MainWindow(Repeater, GUIObject):
     budget_deleted = _undo_stack_changed
 
     def custom_date_range_selected(self):
-        self.custom_daterange_panel.load()
+        panel = CustomDateRangePanel(self.document)
+        panel.view = weakref.proxy(self.view.get_panel_view(panel))
+        panel.load()
 
     def date_range_will_change(self):
         self.daterange_selector.remember_current_range()

@@ -221,7 +221,7 @@ def copy_packages(packages_names, dest, create_links=False, extra_ignores=None):
                 shutil.copy(source_path, dest_path)
 
 def copy_qt_plugins(folder_names, dest): # This is only for Windows
-    from PyQt4.QtCore import QLibraryInfo
+    from PyQt5.QtCore import QLibraryInfo
     qt_plugin_dir = QLibraryInfo.location(QLibraryInfo.PluginsPath)
     def ignore(path, names):
         if path == qt_plugin_dir:
@@ -404,6 +404,8 @@ def build_cocoalib_xibless(dest='cocoa/autogen'):
             xibless.generate(srcpath, dstpath, localizationTable='cocoalib')
 
 def copy_embeddable_python_dylib(dst):
+    if not sysconfig.get_config_var('PYTHONFRAMEWORKPREFIX'):
+        raise Exception("Python needs to be compiled with the -framework option. Aborting.")
     runtime = op.join(sysconfig.get_config_var('PYTHONFRAMEWORKPREFIX'), sysconfig.get_config_var('LDLIBRARY'))
     filedest = op.join(dst, 'Python')
     shutil.copy(runtime, filedest)
@@ -462,7 +464,7 @@ def collect_stdlib_dependencies(script, dest_folder, extra_deps=None):
     open(op.join(dest_folder, 'site.py'), 'w').close()
 
 def fix_qt_resource_file(path):
-    # pyrcc4 under Windows, if the locale is non-english, can produce a source file with a date
+    # pyrcc5 under Windows, if the locale is non-english, can produce a source file with a date
     # containing accented characters. If it does, the encoding is wrong and it prevents the file
     # from being correctly frozen by cx_freeze. To work around that, we open the file, strip all
     # comments, and save.
@@ -479,6 +481,8 @@ def build_cocoa_ext(extname, dest, source_files, extra_frameworks=(), extra_incl
         extra_link_args += ['-framework', extra]
     ext = Extension(extname, source_files, extra_link_args=extra_link_args, include_dirs=extra_includes)
     setup(script_args=['build_ext', '--inplace'], ext_modules=[ext])
-    fn = extname + '.so'
+    # Our problem here is to get the fully qualified filename of the resulting .so but I couldn't
+    # find a documented way to do so. The only thing I could find is this below :(
+    fn = ext._file_name
     assert op.exists(fn)
     move(fn, op.join(dest, fn))

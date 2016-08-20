@@ -6,8 +6,8 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QLineEdit
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QLineEdit
 
 # The QCompleter works by having access to a list of possible matches, but we already have that
 # logic implemented on the model side. It turns out subclassing the QCompleter to adapt it to our
@@ -31,7 +31,7 @@ class CompletableEdit(QLineEdit):
         else:
             return str(self.text())[:self.selectionStart()]
 
-    #--- QLineEdit overrides
+    # --- QLineEdit overrides
     def focusInEvent(self, event):
         QLineEdit.focusInEvent(self, event)
         self.model.view = self
@@ -55,14 +55,14 @@ class CompletableEdit(QLineEdit):
             if len(oldPrefix) < len(prefix):
                 self.model.text = prefix
 
-    #--- Public
+    # --- Public
     def prepareDataForCommit(self):
         # On focus out, we want to see if the text we have is exactly the same as the completion,
         # case-insensitive-wise. If yes, we use the case of the completion rather than our own.
         if self.selectedText() and self.selectedText() == self.model.completion:
             self.model.commit()
 
-    #--- model --> view
+    # --- model --> view
     def refresh(self):
         self.setText(self.model.text + self.model.completion)
         self.setSelection(len(self.model.text), len(self.model.completion))

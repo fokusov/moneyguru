@@ -7,12 +7,19 @@
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 from hscommon.trans import tr, trget
+from hscommon.util import dedupe
 from hscommon.gui.column import Column, Columns
 from .entry_table_base import EntryTableBase, PreviousBalanceRow, TotalRow
 
 trcol = trget('columns')
 
 class EntryTableColumns(Columns):
+    def _set_debit_credit_mode(self, active):
+        self.set_column_visible('debit', active)
+        self.set_column_visible('credit', active)
+        self.set_column_visible('increase', not active)
+        self.set_column_visible('decrease', not active)
+
     def menu_items(self):
         items = Columns.menu_items(self)
         marked = self.column_is_visible('debit')
@@ -22,12 +29,22 @@ class EntryTableColumns(Columns):
     def toggle_menu_item(self, index):
         if index == len(self._optional_columns()):
             debit_visible = self.column_is_visible('debit')
-            self.set_column_visible('debit', not debit_visible)
-            self.set_column_visible('credit', not debit_visible)
-            self.set_column_visible('increase', debit_visible)
-            self.set_column_visible('decrease', debit_visible)
+            self._set_debit_credit_mode(not debit_visible)
         else:
             Columns.toggle_menu_item(self, index)
+
+    def save_columns(self):
+        Columns.save_columns(self)
+        pref_name = '{}.Columns.debit_credit_mode'.format(self.savename)
+        value = self.column_is_visible('debit')
+        self.prefaccess.set_default(pref_name, value)
+
+    def restore_columns(self):
+        Columns.restore_columns(self)
+        pref_name = '{}.Columns.debit_credit_mode'.format(self.savename)
+        debit_credit_mode = bool(self.prefaccess.get_default(pref_name))
+        self._set_debit_credit_mode(debit_credit_mode)
+
 
 class EntryTable(EntryTableBase):
     SAVENAME = 'EntryTable'
@@ -53,13 +70,16 @@ class EntryTable(EntryTableBase):
         self.completable_edit.account = self.account
         self._reconciliation_mode = False
 
-    #--- Override
+    # --- Override
     def _fill(self):
         account = self.account
         if account is None:
             return
         self.account = account
         rows = self._get_account_rows(account)
+        is_native = lambda row: self.document.is_amount_native(row._debit)\
+            and self.document.is_amount_native(row._credit)
+        self._all_amounts_are_native = all(is_native(row) for row in rows)
         if not rows:
             # We still show a total row
             rows.append(TotalRow(self, account, self.document.date_range.end, 0, 0))
@@ -71,7 +91,7 @@ class EntryTable(EntryTableBase):
         self.footer = rows[-1]
         balance_visible = account.is_balance_sheet_account()
         self.columns.set_column_visible('balance', balance_visible)
-        self._restore_from_explicit_selection()
+        self._restore_from_explicit_selection(refresh_view=False)
 
     def _get_current_account(self):
         return self.account
@@ -79,7 +99,7 @@ class EntryTable(EntryTableBase):
     def _get_totals_currency(self):
         return self._get_current_account().currency
 
-    #--- Public
+    # --- Public
     def show_transfer_account(self, row_index=None):
         if row_index is None:
             if not self.selected_entries:
@@ -87,7 +107,7 @@ class EntryTable(EntryTableBase):
             row_index = self.selected_index
         entry = self[row_index].entry
         splits = entry.transaction.splits
-        accounts = [split.account for split in splits if split.account is not None]
+        accounts = dedupe(split.account for split in splits if split.account is not None)
         if len(accounts) < 2:
             return # no transfer
         index = accounts.index(entry.account)
@@ -102,7 +122,7 @@ class EntryTable(EntryTableBase):
         entries = [row.entry for row in self.selected_rows if row.can_reconcile()]
         self.document.toggle_entries_reconciled(entries)
 
-    #--- Properties
+    # --- Properties
     @property
     def reconciliation_mode(self):
         return self._reconciliation_mode
@@ -114,7 +134,7 @@ class EntryTable(EntryTableBase):
         self._reconciliation_mode = value
         self.refresh()
 
-    #--- Event Handlers
+    # --- Event Handlers
     def date_range_changed(self):
         date_range = self.document.date_range
         self.refresh(refresh_view=False)

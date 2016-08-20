@@ -1,9 +1,9 @@
 # Created By: Virgil Dupras
 # Created On: 2010-09-09
 # Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 from hscommon.testutil import eq_
@@ -11,7 +11,7 @@ from hscommon.testutil import eq_
 from ...model.account import AccountType
 from ..base import TestApp, with_app
 
-#---
+# ---
 @with_app(TestApp)
 def test_new_item_in_empty_table(app):
     # Since we have no txn, we have nothing to show in the gltable. Performing new item has no
@@ -20,7 +20,7 @@ def test_new_item_in_empty_table(app):
     app.mw.new_item() # no crash
     eq_(len(app.gltable), 0)
 
-#---
+# ---
 def app_two_sided_txn():
     app = TestApp()
     app.add_accounts('foo', 'bar')
@@ -75,7 +75,7 @@ def test_set_amount_without_shown_account(app):
     app.gltable[1].debit = '42' # no crash
     eq_(app.gltable[1].debit, '42.00')
 
-#---
+# ---
 def app_txns_in_different_date_ranges():
     app = TestApp()
     app.drsel.select_month_range()
@@ -90,8 +90,8 @@ def app_txns_in_different_date_ranges():
 def test_edit_item(app):
     # the table correctly updates txn selection so that when edit item is called, the right txn
     # shown up in the panel.
-    app.mw.edit_item()
-    eq_(app.tpanel.description, 'first')
+    tpanel = app.mw.edit_item()
+    eq_(tpanel.description, 'first')
 
 @with_app(app_txns_in_different_date_ranges)
 def test_only_show_rows_in_date_range(app):
@@ -106,7 +106,7 @@ def test_previous_balance_rows(app):
     eq_(app.gltable[1].balance, '42.00')
     assert app.gltable.is_bold_row(app.gltable[1])
 
-#---
+# ---
 def app_txn_in_income():
     app = TestApp()
     app.add_account('foo', account_type=AccountType.Income)

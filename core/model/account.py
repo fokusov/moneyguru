@@ -1,6 +1,4 @@
-# Created By: Virgil Dupras
-# Created On: 2007-11-15
-# Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
+# Copyright 2016 Virgil Dupras
 #
 # This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
 # which should be included with this package. The terms are also available at
@@ -67,6 +65,8 @@ class Account:
         #: Unique account identifier. Can be used instead of the account name in the UI (faster than
         #: typing the name if you know your numbers).
         self.account_number = ''
+        #: Inactive accounts don't show up in auto-complete.
+        self.inactive = False
         #: Freeform notes about the account.
         self.notes = ''
         #: *readonly*. :class:`.EntryList` belonging to that account. This list is computed from
@@ -79,7 +79,7 @@ class Account:
     def __lt__(self, other):
         return sort_string(self.name) < sort_string(other.name)
 
-    #--- Public
+    # --- Public
     def normalize_amount(self, amount):
         """Returns a "displayable" amount depending on our :attr:`type`.
 
@@ -109,7 +109,7 @@ class Account:
         """Returns whether the account is an income or expense."""
         return self.type in (AccountType.Income, AccountType.Expense)
 
-    #--- Properties
+    # --- Properties
     @property
     def combined_display(self):
         """*readonly*. Display name for the account.

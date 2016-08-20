@@ -18,13 +18,14 @@ http://www.gnu.org/licenses/gpl-3.0.html
 @synthesize typeSelector;
 @synthesize currencySelector;
 @synthesize accountNumberTextField;
+@synthesize inactiveCheckBox;
 @synthesize notesTextField;
 
-- (id)initWithParent:(MGMainWindowController *)aParent
+- (id)initWithPyRef:(PyObject *)aPyRef parentWindow:(NSWindow *)aParentWindow
 {
-    PyAccountPanel *m = [[PyAccountPanel alloc] initWithModel:[[aParent model] accountPanel]];
-    self = [super initWithModel:m parent:aParent];
-    [m bindCallback:createCallback(@"PanelView", self)];
+    PyAccountPanel *m = [[PyAccountPanel alloc] initWithModel:aPyRef];
+    self = [super initWithModel:m parentWindow:aParentWindow];
+    [m bindCallbackWithoutView:createCallback(@"PanelView", self)];
     [m release];
     [self setWindow:createMGAccountProperties_UI(self)];
     typePopUp = [[HSPopUpList alloc] initWithPyRef:[[self model] typeList] popupView:typeSelector];
@@ -54,6 +55,7 @@ http://www.gnu.org/licenses/gpl-3.0.html
 {
     [nameTextField setStringValue:[[self model] name]];
     [accountNumberTextField setStringValue:[[self model] accountNumber]];
+    [inactiveCheckBox setState:[[self model] isInactive] ? NSOnState : NSOffState];
     [notesTextField setStringValue:[[self model] notes]];
     [currencySelector setEnabled:[[self model] canChangeCurrency]];
 }
@@ -62,6 +64,7 @@ http://www.gnu.org/licenses/gpl-3.0.html
 {
     [[self model] setName:[nameTextField stringValue]];
     [[self model] setAccountNumber:[accountNumberTextField stringValue]];
+    [[self model] setInactive:[inactiveCheckBox state] == NSOnState];
     [[self model] setNotes:[notesTextField stringValue]];
 }
 

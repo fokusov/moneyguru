@@ -19,6 +19,20 @@ Whatever your skills, if you are remotely interestested in being a contributor, 
 mentoring you. If that's the case, please refer to [the open ticket on the subject][contrib-issue]
 and let's get started.
 
+## Windows maintainer wanted
+
+As [described on my website][nowindows], v2.9.x serie of moneyGuru is the last one to support
+Windows unless someone steps up to maintain it. If you're a Windows developer and are interested
+in taking this task, [don't hesitate to let me know][contrib-issue].
+
+## OS X maintainer wanted
+
+My Mac Mini is already a couple of years old and is likely to be my last Apple purchase. When it
+dies, I will be unable maintain the OS X version of moneyGuru. I've already stopped paying for the
+Mac Developer membership so I can't sign the apps anymore (in the "official way" I mean. The
+download is still PGP signed) If you're a Mac developer and are interested in taking this task,
+[don't hesitate to let me know][contrib-issue].
+
 # Contents of this folder
 
 This package contains the source for moneyGuru. Its documentation is
@@ -57,41 +71,39 @@ and follow instructions from the script. You can then ignore the rest of the bui
 
 Then, you have to make sure that your system has its "non-pip-installable" prerequisites installed:
 
-* All systems: [Python 3.3+][python]
-* Mac OS X: The last XCode to have the 10.7 SDK included.
-* Windows: Visual Studio 2010, [PyQt 4.7+][pyqt], [cx_Freeze][cxfreeze] and
+* All systems: [Python 3.4+][python]
+* Mac OS X: 10.7+ with XCode command line tools and a "framework enabled" Python (see below)
+* Windows: Visual Studio 2010, [PyQt 5.4+][pyqt], [cx_Freeze][cxfreeze] and
   [Advanced Installer][advinst] (you only need the last two if you want to create an installer)
 
 On Ubuntu, the apt-get command to install all pre-requisites is:
 
-    $ apt-get install python3-dev python3-pyqt4 pyqt4-dev-tools python3-setuptools
+    $ apt-get install python3-dev python3-venv python3-pyqt5 pyqt5-dev-tools
 
 On Arch, it's:
 
-    $ pacman -S python-pyqt4
+    $ pacman -S python-pyqt5
+
+On OS X, an easy way to install a "framework enabled" Python 3 is through [pyenv][pyenv]. Once
+pyenv in installed, run a command like:
+
+    env PYTHON_CONFIGURE_OPTS="--enable-framework" pyenv install 3.5.1
 
 ## Setting up the virtual environment
 
 Use Python's built-in `pyvenv` to create a virtual environment in which we're going to install our
-Python-related dependencies. `pyvenv` is built-in Python but, unlike its `virtualenv` predecessor,
-it doesn't install setuptools and pip (unless you use Python 3.4+), so it has to be installed
-manually:
+Python-related dependencies.
 
     $ pyvenv --system-site-packages env
     $ source env/bin/activate
-    $ python get-pip.py
-
-Then, you can install pip requirements in your virtualenv:
-
     $ pip install -r requirements-[osx|win].txt
-    
+
 ([osx|win] depends, of course, on your platform. On other platforms, just use requirements.txt).
 
 ## Actual building and running
 
 With your virtualenv activated, you can build and run moneyGuru with these commands:
 
-    $ python configure.py
     $ python build.py
     $ python run.py
 
@@ -119,12 +131,13 @@ and is also [available online][documentation].
 
 [moneyguru]: http://www.hardcoded.net/moneyguru/
 [contrib-issue]: https://github.com/hsoft/moneyguru/issues/425
+[nowindows]: https://www.hardcoded.net/archive2015#2015-11-01
 [documentation]: http://www.hardcoded.net/moneyguru/help/en/
 [python]: http://www.python.org/
+[pyenv]: https://github.com/yyuu/pyenv
 [pyqt]: http://www.riverbankcomputing.com
 [cxfreeze]: http://cx-freeze.sourceforge.net/
 [advinst]: http://www.advancedinstaller.com
 [sphinx]: http://sphinx.pocoo.org/
-[polib]: https://bitbucket.org/izi/polib/issue/42
 [tox]: https://tox.readthedocs.org/en/latest/
 

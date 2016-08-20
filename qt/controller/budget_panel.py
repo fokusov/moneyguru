@@ -6,8 +6,8 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import Qt, QSize
-from PyQt4.QtGui import (
+from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtWidgets import (
     QHBoxLayout, QVBoxLayout, QFormLayout, QLabel, QLineEdit, QComboBox, QPlainTextEdit,
     QDialogButtonBox, QSpinBox
 )
@@ -28,12 +28,13 @@ class BudgetPanel(Panel):
         ('amountEdit', 'amount'),
         ('notesEdit', 'notes'),
     ]
+    PERSISTENT_NAME = 'budgetPanel'
 
-    def __init__(self, mainwindow):
+    def __init__(self, model, mainwindow):
         Panel.__init__(self, mainwindow)
+        self.setAttribute(Qt.WA_DeleteOnClose)
         self._setupUi()
-        self.model = mainwindow.model.budget_panel
-        self.model.view = self
+        self.model = model
         self.repeatTypeComboBox = ComboboxModel(model=self.model.repeat_type_list, view=self.repeatTypeComboBoxView)
         self.accountComboBox = ComboboxModel(model=self.model.account_list, view=self.accountComboBoxView)
         self.targetComboBox = ComboboxModel(model=self.model.target_list, view=self.targetComboBoxView)
@@ -101,7 +102,7 @@ class BudgetPanel(Panel):
         self.label_4.setBuddy(self.targetComboBoxView)
         self.label_5.setBuddy(self.amountEdit)
 
-    #--- model --> view
+    # --- model --> view
     def refresh_repeat_every(self):
         self.repeatEveryDescLabel.setText(self.model.repeat_every_desc)
 

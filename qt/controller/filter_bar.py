@@ -6,7 +6,7 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import QObject
+from PyQt5.QtCore import QObject
 
 class FilterBar(QObject):
     BUTTONS = [] # (Title, FilterID)
@@ -21,12 +21,12 @@ class FilterBar(QObject):
 
         self.view.itemSelected.connect(self.itemSelected)
 
-    #--- Event Handlers
+    # --- Event Handlers
     def itemSelected(self, index):
         _, filterId = self.BUTTONS[index]
         self.model.filter_type = filterId
 
-    #--- model --> view
+    # --- model --> view
     def refresh(self):
         for index, (title, filterId) in enumerate(self.BUTTONS):
             if filterId is self.model.filter_type:

@@ -11,11 +11,11 @@ import datetime
 from hscommon.trans import trget, tr
 from hscommon.gui.column import Column
 from ..model.amount import convert_amount
-from .table import GUITable, Row, rowattr
+from .table import GUITable, Row, rowattr, TableWithAmountMixin
 
 trcol = trget('columns')
 
-class ScheduleTable(GUITable):
+class ScheduleTable(GUITable, TableWithAmountMixin):
     SAVENAME = 'ScheduleTable'
     COLUMNS = [
         Column('start_date', display=trcol('Start Date')),
@@ -34,22 +34,26 @@ class ScheduleTable(GUITable):
         GUITable.__init__(self, document=schedule_view.document)
         self.mainwindow = schedule_view.mainwindow
 
-    #--- Override
+    # --- Override
     def _update_selection(self):
         self.mainwindow.selected_schedules = self.selected_schedules
 
     def _fill(self):
+        self._all_amounts_are_native = True
         for schedule in self.document.schedules:
-            self.append(ScheduleTableRow(self, schedule))
+            row = ScheduleTableRow(self, schedule)
+            if not row.is_amount_native:
+                self._all_amounts_are_native = False
+            self.append(row)
 
-    #--- Public
+    # --- Public
     def delete(self):
         self.document.delete_schedules(self.selected_schedules)
 
     def edit(self):
         self.mainwindow.edit_item()
 
-    #--- Properties
+    # --- Properties
     @property
     def selected_schedules(self):
         return [row.schedule for row in self.selected_rows]
@@ -62,7 +66,7 @@ class ScheduleTableRow(Row):
         self.transaction = schedule.ref
         self.load()
 
-    #--- Public
+    # --- Public
     def load(self):
         schedule = self.schedule
         txn = schedule.ref
@@ -90,6 +94,7 @@ class ScheduleTableRow(Row):
         except ValueError: # currency coercing problem
             currency = self.document.default_currency
             self._amount = sum(convert_amount(s.amount, currency, s.transaction.date) for s in tos)
+        self.is_amount_native = self.document.is_amount_native(self._amount)
         self._amount_fmt = self.document.format_amount(self._amount)
 
     def save(self):
@@ -101,7 +106,7 @@ class ScheduleTableRow(Row):
         else:
             return Row.sort_key_for_column(self, column_name)
 
-    #--- Properties
+    # --- Properties
     start_date = rowattr('_start_date_fmt')
     stop_date = rowattr('_stop_date_fmt')
     repeat_type = rowattr('_repeat_type')

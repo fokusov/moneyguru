@@ -1,22 +1,21 @@
 # Created By: Virgil Dupras
 # Created On: 2009-11-07
 # Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 # GUI calls are often made under the same conditions for multiple guis. Duplicating that condition
 # in every test unit can get tedious, so this test unit is a "theme based" unit which tests calls
 # made to GUIs' view.
 
-from hscommon.currency import EUR
-
 from ...document import FilterType
 from ...model.account import AccountType
+from ...model.currency import EUR
 from ..base import TestApp, with_app, testdata
 
-#--- No Setup
+# --- No Setup
 def test_initial_gui_calls():
     app = TestApp()
     app.show_nwview()
@@ -25,7 +24,7 @@ def test_initial_gui_calls():
     app.mw.view.check_gui_calls(expected)
     app.drsel.view.check_gui_calls(['refresh_custom_ranges', 'refresh'])
 
-#--- Cleared GUI calls
+# --- Cleared GUI calls
 def app_cleared_gui_calls():
     app = TestApp()
     app.clear_gui_calls()
@@ -95,15 +94,15 @@ def test_new_budget():
     app = app_cleared_gui_calls()
     app.add_account('income', account_type=AccountType.Income) # we need an account for the panel to load
     app.show_bview()
-    app.mw.new_item()
-    app.bpanel.repeat_type_list.view.check_gui_calls_partial(['refresh'])
+    bpanel = app.mw.new_item()
+    bpanel.repeat_type_list.view.check_gui_calls_partial(['refresh'])
 
 def test_new_schedule():
     # Repeat options and mct notices must be updated upon panel load
     app = app_cleared_gui_calls()
     app.show_scview()
-    app.mw.new_item()
-    app.scpanel.repeat_type_list.view.check_gui_calls_partial(['refresh'])
+    scpanel = app.mw.new_item()
+    scpanel.repeat_type_list.view.check_gui_calls_partial(['refresh'])
 
 @with_app(app_cleared_gui_calls)
 def test_select_mainwindow_next_previous_view(app):
@@ -144,9 +143,10 @@ def test_ttable_add_and_cancel():
 def test_save_custom_range(app):
     # Saving a custom range causes the date range selector's view to refresh them.
     app.drsel.select_custom_date_range()
-    app.cdrpanel.slot_index = 1
-    app.cdrpanel.slot_name = 'foo'
-    app.cdrpanel.save()
+    cdrpanel = app.get_current_panel()
+    cdrpanel.slot_index = 1
+    cdrpanel.slot_name = 'foo'
+    cdrpanel.save()
     app.drsel.view.check_gui_calls(['refresh_custom_ranges', 'refresh'])
 
 def test_show_account():
@@ -165,7 +165,7 @@ def test_stop_editing_on_applying_filter(app):
     tview.filter_bar.filter_type = FilterType.Income
     tview.ttable.view.check_gui_calls_partial(['stop_editing'])
 
-#--- On transaction view
+# --- On transaction view
 def app_on_transaction_view():
     app = TestApp()
     app.show_tview()
@@ -184,16 +184,16 @@ def test_stop_editing_on_pane_change(app):
     app.mw.select_next_view()
     app.check_gui_calls_partial(app.ttable_gui, ['stop_editing'])
 
-#--- One account
+# --- One account
 def app_one_account():
     app = TestApp()
     app.add_account('foobar')
     app.show_account()
     app.clear_gui_calls()
     return app
-    
+
 def test_add_entry():
-    # Before adding a new entry, make sure the entry table is not in edition mode. Then, start 
+    # Before adding a new entry, make sure the entry table is not in edition mode. Then, start
     # editing the new entry. Adding an entry also refreshes account totals.
     app = app_one_account()
     app.add_entry()
@@ -222,9 +222,9 @@ def test_delete_entry():
 @with_app(app_one_account)
 def test_edit_account(app):
     app.show_nwview()
-    app.mw.edit_item() # apanel popping up
+    apanel = app.mw.edit_item() # apanel popping up
     # Popping the panel refreshes the type list selection
-    app.apanel.type_list.view.check_gui_calls(['update_selection'])
+    apanel.type_list.view.check_gui_calls_partial(['update_selection'])
 
 def test_jump_to_account():
     app = app_one_account()
@@ -238,14 +238,15 @@ def test_jump_to_account():
 @with_app(app_one_account)
 def test_export_panel(app):
     app.mw.export()
-    app.expanel.view.check_gui_calls_partial(['set_table_enabled'])
-    app.expanel.export_all = False
+    expanel = app.get_current_panel()
+    expanel.view.check_gui_calls_partial(['set_table_enabled'])
+    expanel.export_all = False
     # We enable the table, and because there's no account selected, we disable the export button
-    app.expanel.view.check_gui_calls(['set_table_enabled', 'set_export_button_enabled'])    
-    app.expanel.account_table[0].export = True
-    app.expanel.view.check_gui_calls(['set_export_button_enabled'])    
+    expanel.view.check_gui_calls(['set_table_enabled', 'set_export_button_enabled'])
+    expanel.account_table[0].export = True
+    expanel.view.check_gui_calls(['set_export_button_enabled'])
 
-#--- One transaction
+# --- One transaction
 def app_one_transaction():
     app = TestApp()
     app.add_txn()
@@ -264,7 +265,7 @@ def test_change_tview_filter(app):
     app.tfbar.filter_type = FilterType.Reconciled
     app.check_gui_calls_partial(app.mainwindow_gui, ['refresh_status_line'])
 
-#--- Load file with balance sheet selected
+# --- Load file with balance sheet selected
 def app_load_file_with_bsheet_selected():
     app = TestApp()
     app.show_nwview()
@@ -278,7 +279,7 @@ def test_views_are_refreshed(app):
     app.check_gui_calls_partial(app.bsheet_gui, ['refresh'])
     app.check_gui_calls_partial(app.nwgraph_gui, ['refresh'])
 
-#--- Transaction between income and expense
+# --- Transaction between income and expense
 def app_transaction_between_income_and_expense():
     app = TestApp()
     app.add_account('income', account_type=AccountType.Income)
@@ -298,7 +299,7 @@ def test_etable_show_income_account(app):
     app.etable.view.check_gui_calls(['update_selection', 'show_selected_row', 'refresh'])
     app.bargraph.view.check_gui_calls(['refresh'])
 
-#--- Transaction between asset and liability
+# --- Transaction between asset and liability
 def app_transaction_between_asset_and_liability():
     app = TestApp()
     app.add_account('asset', account_type=AccountType.Asset)
@@ -318,21 +319,23 @@ def test_etable_show_asset_account(app):
     app.etable.view.check_gui_calls(['update_selection', 'show_selected_row', 'refresh'])
     app.balgraph.view.check_gui_calls(['refresh'])
 
-#--- Transaction with panel loaded
+# --- Transaction with panel loaded
 def app_transaction_with_panel_loaded():
     app = TestApp()
     app.add_txn('20/02/2010', from_='foo', to='bar', amount='42')
-    app.tpanel.load()
+    app.mw.edit_item()
     app.clear_gui_calls()
     return app
 
 def test_move_split():
     # The split table is refreshed after a move
     app = app_transaction_with_panel_loaded()
-    app.stable.move_split(0, 1)
-    app.stable.view.check_gui_calls_partial(['refresh'])
+    tpanel = app.get_current_panel()
+    stable = tpanel.split_table
+    stable.move_split(0, 1)
+    stable.view.check_gui_calls_partial(['refresh'])
 
-#--- Completable edit
+# --- Completable edit
 def app_completable_edit():
     app = TestApp()
     app.add_txn(description='Bazooka')

@@ -12,7 +12,7 @@ from hscommon.trans import tr
 from hscommon.gui.column import Columns
 
 from ..exception import DuplicateAccountNameError
-from .base import RestorableChild, SheetViewNotificationsMixin, MESSAGES_DOCUMENT_CHANGED
+from .base import ViewChild, SheetViewNotificationsMixin, MESSAGES_DOCUMENT_CHANGED
 
 # used in both bsheet and istatement
 def get_delta_perc(delta_amount, start_amount):
@@ -21,19 +21,20 @@ def get_delta_perc(delta_amount, start_amount):
     else:
         return '---'
 
-class Report(RestorableChild, tree.Tree, SheetViewNotificationsMixin):
+class Report(ViewChild, tree.Tree, SheetViewNotificationsMixin):
     SAVENAME = ''
     COLUMNS = []
     INVALIDATING_MESSAGES = MESSAGES_DOCUMENT_CHANGED | {'accounts_excluded', 'date_range_changed'}
 
     def __init__(self, parent_view):
-        RestorableChild.__init__(self, parent_view)
+        ViewChild.__init__(self, parent_view)
         tree.Tree.__init__(self)
+        self._was_restored = False
         self.columns = Columns(self, prefaccess=parent_view.document, savename=self.SAVENAME)
         self.edited = None
         self._expanded_paths = {(0, ), (1, )}
 
-    #--- Override
+    # --- Override
     def _do_restore_view(self):
         if not self.document.can_restore_from_prefs():
             return False
@@ -51,7 +52,7 @@ class Report(RestorableChild, tree.Tree, SheetViewNotificationsMixin):
         self.view.refresh()
         self.restore_view()
 
-    #--- Virtual
+    # --- Virtual
     def _compute_account_node(self, node):
         pass
 
@@ -63,7 +64,7 @@ class Report(RestorableChild, tree.Tree, SheetViewNotificationsMixin):
     def _refresh(self):
         pass
 
-    #--- Protected
+    # --- Protected
     def _node_of_account(self, account):
         return self.find(lambda n: getattr(n, 'account', None) is account)
 
@@ -88,7 +89,7 @@ class Report(RestorableChild, tree.Tree, SheetViewNotificationsMixin):
         if not (isinstance(self.selected, Node) and self.selected.is_account):
             self._select_first()
 
-    #--- Public
+    # --- Public
     def add_account(self):
         self.view.stop_editing()
         self.save_edits()
@@ -175,7 +176,8 @@ class Report(RestorableChild, tree.Tree, SheetViewNotificationsMixin):
         if anodes:
             accounts = [n.account for n in anodes]
             if any(a.entries for a in accounts):
-                self.mainwindow.account_reassign_panel.load(accounts)
+                panel = self.parent_view.get_account_reassign_panel()
+                panel.load(accounts)
             else:
                 self.document.delete_accounts(accounts)
 
@@ -259,6 +261,11 @@ class Report(RestorableChild, tree.Tree, SheetViewNotificationsMixin):
         if refresh_view:
             self.view.refresh()
 
+    def restore_view(self):
+        if not self._was_restored:
+            if self._do_restore_view():
+                self._was_restored = True
+
     def save_edits(self):
         node = self.edited
         if node is None:
@@ -319,7 +326,7 @@ class Report(RestorableChild, tree.Tree, SheetViewNotificationsMixin):
         if affected_accounts:
             self.document.toggle_accounts_exclusion(affected_accounts)
 
-    #--- Event handlers
+    # --- Event handlers
     def account_added(self):
         self.refresh()
 
@@ -343,7 +350,7 @@ class Report(RestorableChild, tree.Tree, SheetViewNotificationsMixin):
     def date_range_changed(self):
         self.refresh()
 
-    document_restoring_preferences = RestorableChild.restore_view
+    document_restoring_preferences = restore_view
 
     def edition_must_stop(self):
         self.view.stop_editing()
@@ -363,7 +370,7 @@ class Report(RestorableChild, tree.Tree, SheetViewNotificationsMixin):
     def performed_undo_or_redo(self):
         self.refresh()
 
-    #--- Properties
+    # --- Properties
     @property
     def can_show_selected_account(self):
         return self.selected_account is not None

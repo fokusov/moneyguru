@@ -5,10 +5,10 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from hscommon.currency import Currency
 from hscommon.trans import tr
 
 from ..const import PaneType
+from ..model.currency import Currency
 from .base import BaseView, LinkedSelectableList
 
 class DocPropsView(BaseView):
@@ -64,5 +64,5 @@ class DocPropsView(BaseView):
         self.ahead_months_list.select(self.document.ahead_months)
         self.year_start_month_list.select(self.document.year_start_month - 1)
 
-    #--- Events
+    # --- Events
     document_changed = _revalidate

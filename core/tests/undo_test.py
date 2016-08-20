@@ -1,9 +1,9 @@
 # Created By: Virgil Dupras
 # Created On: 2008-06-24
 # Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 import copy
@@ -11,12 +11,12 @@ import time
 from datetime import date
 
 from hscommon.testutil import eq_
-from hscommon.currency import EUR
 
 from ..const import PaneType
 from ..document import ScheduleScope
 from ..model.date import MonthRange
 from ..model.account import AccountType
+from ..model.currency import EUR
 from .base import compare_apps, testdata, TestApp, with_app
 
 def copydoc(doc):
@@ -42,7 +42,7 @@ def pytest_funcarg__checkstate(request):
         compare_apps(before_undo, app.doc)
     return docheck
 
-#---
+# ---
 @with_app(TestApp)
 def test_can_redo_initially(app):
     # can_redo is initially false.
@@ -77,8 +77,8 @@ def test_undo_add_group(app, checkstate):
 def test_add_schedule(app, checkstate):
     # schedule addition are undoable
     app.show_scview()
-    app.scpanel.new()
-    app.scpanel.save()    
+    scpanel = app.mw.new_item()
+    scpanel.save()
     checkstate()
 
 @with_app(TestApp)
@@ -110,23 +110,23 @@ def test_undo_shown_account(app):
     app.show_account()
     app.doc.undo() # no crash
 
-#---
+# ---
 def app_one_nameless_account():
     app = TestApp()
     app.add_account()
     return app
-    
+
 @with_app(app_one_nameless_account)
 def test_undo_apanel_attrs(app, checkstate):
     # Undoing a changes made from apanel work
-    app.mw.edit_item()
-    app.apanel.currency = EUR
-    app.apanel.account_number = '1234'
-    app.apanel.notes = 'some notes'
-    app.apanel.save()
+    apanel = app.mw.edit_item()
+    apanel.currency = EUR
+    apanel.account_number = '1234'
+    apanel.notes = 'some notes'
+    apanel.save()
     checkstate()
 
-#---
+# ---
 def app_one_named_account():
     app = TestApp()
     app.add_account('foobar')
@@ -248,7 +248,7 @@ def test_redo_delete_while_in_etable(app):
 
 @with_app(app_one_named_account)
 def test_undo_add_entry(app, checkstate):
-    # Undoing an entry addition works in one shot (not one shot to blank the fields then one 
+    # Undoing an entry addition works in one shot (not one shot to blank the fields then one
     # other shot to remove the transaction.
     app.add_entry(description='foobar')
     checkstate()
@@ -298,7 +298,7 @@ def test_undo_twice(app):
     app.doc.undo()
     eq_(app.bsheet.assets.children_count, 2)
 
-#---
+# ---
 def app_account_group():
     app = TestApp()
     app.add_group()
@@ -333,7 +333,7 @@ def test_undo_rename_group(app, checkstate):
     app.bsheet.save_edits()
     checkstate()
 
-#---
+# ---
 def app_account_in_group():
     app = TestApp()
     app.add_group('group')
@@ -366,7 +366,7 @@ def test_undo_move_account_out_of_group(app, checkstate):
     app.bsheet.move([[0, 0, 0]], [1])
     checkstate()
 
-#---
+# ---
 def app_load_file():
     # Loads 'simple.moneyguru', a file with 2 accounts and 2 entries in each. Select the first entry.
     app = TestApp()
@@ -412,7 +412,19 @@ def test_undo_add_group_besides_account_in_group(app, checkstate):
     app.bsheet.add_account_group()
     checkstate()
 
-#---
+@with_app(app_load_file)
+def test_undo_account_deletion_with_reassign(app, checkstate):
+    # When we undo an account deletion that implies txns reassignments, undoing that action works
+    # properly. We would previously duplicate all those reassigned txns. ref #438
+    nwview = app.show_nwview()
+    nwview.sheet.selected = nwview.sheet.assets[0]
+    nwview.sheet.delete()
+    arpanel = app.get_current_panel()
+    arpanel.account_list.select(1) # reassign txns
+    arpanel.save() # continue deletion
+    checkstate()
+
+# ---
 def app_two_txns_in_two_accounts():
     # 2 accounts, 1 transaction that is a transfer between the 2 accounts, and 1 transaction that
     # is imbalanced.
@@ -440,7 +452,7 @@ def test_etable_refreshes(app):
     app.clear_gui_calls()
     app.doc.undo()
     eq_(app.etable_count(), 1)
-    app.check_gui_calls(app.etable_gui, ['refresh', 'update_selection', 'stop_editing'])
+    app.check_gui_calls(app.etable_gui, ['refresh', 'stop_editing'])
 
 @with_app(app_two_txns_in_two_accounts)
 def test_ttable_refreshes(app):
@@ -448,7 +460,7 @@ def test_ttable_refreshes(app):
     app.clear_gui_calls()
     app.doc.undo()
     eq_(app.ttable.row_count, 1)
-    app.check_gui_calls(app.ttable_gui, ['refresh', 'update_selection', 'stop_editing'])
+    app.check_gui_calls(app.ttable_gui, ['refresh', 'stop_editing'])
 
 @with_app(app_two_txns_in_two_accounts)
 def test_undo_change_transaction_from_etable(app, checkstate):
@@ -495,12 +507,13 @@ def test_undo_delete_transaction(app, checkstate):
 
 @with_app(app_two_txns_in_two_accounts)
 def test_undo_delete_account_with_txn(app, checkstate):
-    # When 'first' is deleted, one transaction is simply unbound, and the other is deleted. we 
+    # When 'first' is deleted, one transaction is simply unbound, and the other is deleted. we
     # must undo all that
     app.show_nwview()
     app.bsheet.selected = app.bsheet.assets[0]
     app.bsheet.delete()
-    app.arpanel.save() # continue deletion
+    arpanel = app.get_current_panel()
+    arpanel.save() # continue deletion
     checkstate()
 
 @with_app(app_two_txns_in_two_accounts)
@@ -514,30 +527,30 @@ def test_undo_duplicate_transaction(app, checkstate):
 def test_undo_mass_edition(app, checkstate):
     # Mass edition can be undone.
     app.etable.select([0, 1])
-    app.mepanel.load()
-    app.mepanel.description_enabled = True
-    app.mepanel.description = 'foobar'
-    app.mepanel.save()
+    mepanel = app.mw.edit_item()
+    mepanel.description_enabled = True
+    mepanel.description = 'foobar'
+    mepanel.save()
     checkstate()
 
 @with_app(app_two_txns_in_two_accounts)
 def test_undo_schedule(app, checkstate):
-    app.tpanel.load()
-    app.tpanel.repeat_index = 1 # daily
-    app.tpanel.save()
+    tpanel = app.mw.edit_item()
+    tpanel.repeat_index = 1 # daily
+    tpanel.save()
     checkstate()
 
 @with_app(app_two_txns_in_two_accounts)
 def test_undo_schedule_entry_transfer(app):
     # After undoing a scheduling, the entry has the wrong transfer
     app.etable.select([0])
-    app.tpanel.load()
-    app.tpanel.repeat_index = 1 # daily
-    app.tpanel.save()
+    tpanel = app.mw.edit_item()
+    tpanel.repeat_index = 1 # daily
+    tpanel.save()
     app.doc.undo()
     eq_(app.etable[0].transfer, 'second')
 
-#---
+# ---
 def app_two_txns_same_date():
     app = TestApp()
     app.add_account()
@@ -559,7 +572,7 @@ def test_undo_reorder_entry(app, checkstate):
     app.etable.move([1], 0)
     checkstate()
 
-#---
+# ---
 def app_three_txns_reconciled():
     app = TestApp()
     app.add_account()
@@ -617,7 +630,7 @@ def test_toggle_reconciled(app, checkstate):
     app.etable[1].toggle_reconciled()
     checkstate()
 
-#---
+# ---
 def app_import_ofx():
     app = TestApp()
     app.doc.date_range = MonthRange(date(2008, 2, 1))
@@ -654,7 +667,7 @@ def test_undo_import(app, checkstate):
     app.iwin.import_selected_pane()
     checkstate()
 
-#---
+# ---
 def app_with_autocreated_transfer():
     app = TestApp()
     app.add_account()
@@ -669,7 +682,7 @@ def test_undo_delete_transaction_brings_back_auto_created_account(app, checkstat
     app.etable.delete()
     checkstate()
 
-#---
+# ---
 def app_scheduled_txn():
     app = TestApp()
     app.add_account('account')
@@ -680,10 +693,10 @@ def app_scheduled_txn():
 
 @with_app(app_scheduled_txn)
 def test_change_schedule(app, checkstate):
-    app.scpanel.load()
-    app.scpanel.description = 'changed'
-    app.scpanel.repeat_every = 12
-    app.scpanel.save()
+    scpanel = app.mw.edit_item()
+    scpanel.description = 'changed'
+    scpanel.repeat_every = 12
+    scpanel.save()
     checkstate()
 
 @with_app(app_scheduled_txn)
@@ -703,7 +716,8 @@ def test_delete_account(app, checkstate):
     app.show_nwview()
     app.bsheet.selected = app.bsheet.assets[0]
     app.bsheet.delete()
-    app.arpanel.save()
+    arpanel = app.get_current_panel()
+    arpanel.save()
     checkstate()
 
 @with_app(app_scheduled_txn)
@@ -741,7 +755,7 @@ def test_reconcile_spawn_by_toggling(app, checkstate):
     app.etable[0].toggle_reconciled()
     checkstate()
 
-#---
+# ---
 def app_with_budget(monkeypatch):
     app = TestApp()
     monkeypatch.patch_today(2008, 1, 27)
@@ -754,9 +768,10 @@ def app_with_budget(monkeypatch):
 
 @with_app(app_with_budget)
 def test_change_budget(app, checkstate):
-    app.bpanel.load()
-    app.bpanel.repeat_every = 12
-    app.bpanel.save()
+    bpanel = app.mw.edit_item()
+    bpanel.load()
+    bpanel.repeat_every = 12
+    bpanel.save()
     checkstate()
 
 @with_app(app_with_budget)
@@ -764,7 +779,8 @@ def test_delete_account_with_budget(app, checkstate):
     app.show_pview()
     app.istatement.selected = app.istatement.expenses[0]
     app.istatement.delete()
-    app.arpanel.save()
+    arpanel = app.get_current_panel()
+    arpanel.save()
     checkstate()
 
 @with_app(app_with_budget)

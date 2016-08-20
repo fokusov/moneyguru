@@ -1,17 +1,17 @@
-# Created By: Virgil Dupras
-# Created On: 2008-07-03
-# Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
+# Copyright 2016 Virgil Dupras
 #
 # This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from hscommon.currency import Currency
+import weakref
+
 from hscommon.gui.selectable_list import GUISelectableList
 from hscommon.trans import tr
 
 from ..exception import DuplicateAccountNameError
 from ..model.account import AccountType
+from ..model.currency import Currency
 from .base import MainWindowPanel, LinkedSelectableList
 
 ACCOUNT_TYPE_DESC = {
@@ -50,17 +50,18 @@ class AccountPanel(MainWindowPanel):
     def __init__(self, mainwindow):
         MainWindowPanel.__init__(self, mainwindow)
         self._init_fields()
-        self.type_list = AccountTypeList(self)
+        self_proxy = weakref.proxy(self)
+        self.type_list = AccountTypeList(self_proxy)
         currencies_display = ['%s - %s' % (currency.code, currency.name) for currency in Currency.all]
 
         def setfunc(index):
             try:
-                self.currency = Currency.all[index]
+                self_proxy.currency = Currency.all[index]
             except IndexError:
                 pass
         self.currency_list = LinkedSelectableList(items=currencies_display, setfunc=setfunc)
 
-    #--- Override
+    # --- Override
     def _load(self, account):
         self.document.stop_edition()
         self._init_fields()
@@ -68,6 +69,7 @@ class AccountPanel(MainWindowPanel):
         self.type = account.type
         self.currency = account.currency
         self.account_number = account.account_number
+        self.inactive = account.inactive
         self.notes = account.notes
         self.type_list.select(AccountType.InOrder.index(self.type))
         self.currency_list.select(Currency.all.index(self.currency))
@@ -76,7 +78,8 @@ class AccountPanel(MainWindowPanel):
 
     def _save(self):
         kwargs = dict(
-            name=self.name, type=self.type, account_number=self.account_number, notes=self.notes
+            name=self.name, type=self.type, account_number=self.account_number,
+            inactive=self.inactive, notes=self.notes
         )
         if self.can_change_currency:
             kwargs['currency'] = self.currency
@@ -85,7 +88,7 @@ class AccountPanel(MainWindowPanel):
         except DuplicateAccountNameError:
             pass
 
-    #--- Private
+    # --- Private
     def _init_fields(self):
         self.type = AccountType.Asset
         self.currency = None

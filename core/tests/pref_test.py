@@ -1,9 +1,9 @@
 # Created By: Virgil Dupras
 # Created On: 2010-06-01
 # Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 # Tests that make sure preferences are correctly saved/restored
@@ -14,7 +14,7 @@ from ..const import PaneType, PaneArea
 from ..gui.main_window import Preference
 from .base import TestApp, with_app, testdata
 
-#--- Pristine
+# --- Pristine
 @with_app(TestApp)
 def test_mainwindow_panes_reopen(app):
     # Main Window panes re-open themselves upon launch, in the same order
@@ -126,7 +126,7 @@ def test_account_prefs_are_saved_if_app_is_closed_with_it_opened(app):
     aview = newapp.show_account()
     eq_(aview.etable.columns.column_width('description'), 4242)
 
-#--- Columns save/restore
+# --- Columns save/restore
 def assert_column_save_restore(app, tablename, colname, show_pane_func):
     getattr(app, show_pane_func)()
     table = getattr(app, tablename)
@@ -156,6 +156,19 @@ def test_etable_restores_columns(app):
     eq_(table.columns.column_width('payee'), 999)
 
 @with_app(TestApp)
+def test_etable_restores_debit_credit_pref(app):
+    # The "Debit/Credit" preference is properly restored. ref #421
+    app.add_account('foo')
+    aview = app.show_account()
+    etable = aview.etable
+    DEBIT_CREDIT_INDEX = len(etable.columns.menu_items()) - 1
+    etable.columns.toggle_menu_item(DEBIT_CREDIT_INDEX)
+    assert etable.columns.column_is_visible('debit')
+    newapp = app.save_and_load()
+    aview = newapp.show_account('foo')
+    assert aview.etable.columns.column_is_visible('debit')
+
+@with_app(TestApp)
 def test_sctable_restores_columns(app):
     assert_column_save_restore(app, 'sctable', 'payee', 'show_scview')
 
@@ -171,7 +184,7 @@ def test_bsheet_restores_columns(app):
 def test_istatement_restores_columns(app):
     assert_column_save_restore(app, 'istatement', 'last_cash_flow', 'show_pview')
 
-#--- Expanded group
+# --- Expanded group
 def app_expanded_group():
     app = TestApp()
     app.add_group('group')
@@ -201,7 +214,7 @@ def test_expanded_nodes_are_restored_under_cocoa(app):
     newapp.show_nwview()
     assert (0, 0) in newapp.bsheet.expanded_paths
 
-#--- Two different documents
+# --- Two different documents
 def test_expanded_node_prefs_is_at_document_level():
     # Expanded node preferences are at the document level
     app1 = TestApp()

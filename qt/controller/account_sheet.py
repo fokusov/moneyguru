@@ -6,8 +6,8 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import Qt, QMimeData, QByteArray
-from PyQt4.QtGui import QPixmap, QPalette, QFont, QItemSelection
+from PyQt5.QtCore import Qt, QMimeData, QByteArray, QItemSelection
+from PyQt5.QtGui import QPixmap, QPalette, QFont
 
 from hscommon.util import nonone
 from qtlib.column import Columns
@@ -58,7 +58,8 @@ class AccountSheetDelegate(ItemDelegate):
             result.append(deco)
         return result
 
-    def _prepare_paint_options(self, option, index):
+    def initStyleOption(self, option, index):
+        ItemDelegate.initStyleOption(self, option, index)
         node = index.internalPointer()
         ref = node.ref
         if ref.is_excluded:
@@ -116,14 +117,14 @@ class AccountSheet(TreeModel):
         self.view.deletePressed.connect(self.model.delete)
         self.view.doubleClicked.connect(self.model.show_selected_account)
 
-    #--- TreeModel overrides
+    # --- TreeModel overrides
     def _createNode(self, ref, row):
         return Node(self, None, ref, row)
 
     def _getChildren(self):
         return self.model[:]
 
-    #--- Private
+    # --- Private
     def _updateViewSelection(self):
         # Takes the selection on the model's side and update the view with it.
         selectedPath = self.model.selected_path
@@ -139,7 +140,7 @@ class AccountSheet(TreeModel):
         self.font = font
         self.view.setFont(font)
 
-    #--- Data Model methods
+    # --- Data Model methods
     def columnCount(self, parent):
         return self.model.columns.columns_count()
 
@@ -227,7 +228,7 @@ class AccountSheet(TreeModel):
         self.model.save_edits()
         return True
 
-    #--- Drag & Drop
+    # --- Drag & Drop
     def dropMimeData(self, mimeData, action, row, column, parentIndex):
         if not mimeData.hasFormat(MIME_NODEPATHS):
             return False
@@ -260,7 +261,7 @@ class AccountSheet(TreeModel):
     def supportedDropActions(self):
         return Qt.MoveAction
 
-    #--- Events
+    # --- Events
     def appPrefsChanged(self):
         self._updateFontSize(prefs=self.sender())
 
@@ -276,7 +277,7 @@ class AccountSheet(TreeModel):
         node = index.internalPointer()
         self.model.expand_node(node.ref)
 
-    #--- model --> view
+    # --- model --> view
     def refresh(self):
         self.reset()
         self.refresh_expanded_paths()

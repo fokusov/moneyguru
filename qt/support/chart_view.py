@@ -5,8 +5,9 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import Qt, QRectF, QPointF
-from PyQt4.QtGui import QWidget, QPen, QLinearGradient, QPainter
+from PyQt5.QtCore import Qt, QRectF, QPointF
+from PyQt5.QtGui import QPen, QLinearGradient, QPainter
+from PyQt5.QtWidgets import QWidget
 
 # Used by subclasses for brush creation
 def gradientFromColor(color):
@@ -17,7 +18,7 @@ def gradientFromColor(color):
     return gradient
 
 class ChartView(QWidget):
-    #--- Virtual
+    # --- Virtual
     def fontForID(self, fontId):
         # Return a QFont instance that is represented by fontId
         pass
@@ -28,7 +29,7 @@ class ChartView(QWidget):
     def brushForID(self, brushId):
         pass
 
-    #--- Override
+    # --- Override
     def resizeEvent(self, event):
         if self.dataSource is not None:
             self.dataSource.set_view_size(self.width(), self.height())
@@ -44,7 +45,7 @@ class ChartView(QWidget):
         self.dataSource.draw()
         del self.current_painter
 
-    #--- Public
+    # --- Public
     def flipRect(self, rect):
         # Coordinates from the core are based on the origin being at the *lower* left corner. In
         # Qt, it's at the upper left corner. We have to flip that.
@@ -57,7 +58,7 @@ class ChartView(QWidget):
         y = self.height() - y
         return (x, y)
 
-    #--- model --> view
+    # --- model --> view
     def draw_line(self, p1, p2, pen):
         painter = self.current_painter
         painter.setPen(pen)

@@ -1,32 +1,33 @@
 # Created By: Virgil Dupras
 # Created On: 2010-10-26
 # Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 from hscommon.testutil import eq_
-from hscommon.currency import USD
 
+from ..model.currency import USD
 from ..gui.export_panel import ExportFormat
 from ..loader.csv import Loader as CSVLoader
 from ..loader.qif import Loader as QIFLoader
 from .base import TestApp, with_app
 
-#--- Utils
+# --- Utils
 def perform_export(app, options=None):
     filepath = str(app.tmppath() + 'foo.csv')
     app.mw.export()
-    app.expanel.export_format = ExportFormat.CSV
-    app.expanel.export_path = filepath
+    expanel = app.get_current_panel()
+    expanel.export_format = ExportFormat.CSV
+    expanel.export_path = filepath
     if options is not None:
         for key, value in options.items():
-            setattr(app.expanel, key, value)
-    app.expanel.save()
+            setattr(expanel, key, value)
+    expanel.save()
     return filepath
 
-#---
+# ---
 @with_app(TestApp)
 def test_export_only_current_date_range(app):
     # when the option to export only current date range is selected, well, we only export txns in
@@ -47,7 +48,7 @@ def test_export_only_current_date_range(app):
     loader.parse(expath)
     eq_(len(loader.blocks), 2) # 1 account + 1 entry
 
-#---
+# ---
 def app_transaction_with_payee_and_checkno():
     app = TestApp()
     app.add_account('Checking')
@@ -65,7 +66,7 @@ def test_export_simple_txn_to_csv(app):
     expected = ['Checking', '10/10/2007', 'Deposit', 'Payee', '42', 'Salary', '42.00', 'USD']
     eq_(lines[1], expected)
 
-#---
+# ---
 def app_transaction_with_splits():
     app = TestApp()
     app.add_account('checking')
@@ -87,7 +88,7 @@ def test_export_txn_with_splits_to_csv(app):
     expected = ['checking', '26/10/2010', '', '', '', 'split1, split2', '42.00', 'USD']
     eq_(lines[1], expected)
 
-#---
+# ---
 def app_txn_with_null_amount():
     app = TestApp()
     app.add_account('checking')

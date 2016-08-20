@@ -1,4 +1,4 @@
-# Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
+# Copyright 2016 Virgil Dupras
 #
 # This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
 # which should be included with this package. The terms are also available at
@@ -11,7 +11,6 @@ from objp.util import pyref, dontwrap, nsrect, nssize, nspoint
 from cocoa import install_exception_hook, proxy, install_cocoa_logger
 from cocoa.inter import (PyGUIObject, GUIObjectView, PyTextField, PyTable, PyColumns, PyOutline,
     OutlineView, PySelectableList, PyBaseApp)
-from hscommon.currency import Currency, USD
 from hscommon.util import nonone
 
 # Set translation func. This has to be set before core modules are initialized
@@ -24,9 +23,11 @@ from core.exception import FileFormatError
 from core.gui.csv_options import FIELD_ORDER as CSV_FIELD_ORDER, \
     SUPPORTED_ENCODINGS as CSV_SUPPORTED_ENCODINGS
 from core.gui.date_widget import DateWidget
+from core.gui.import_window import ActionSelectionOptions
 from core.gui.main_window import MainWindow
 from core.gui.print_view import PrintView
 from core.gui.transaction_print import TransactionPrint, EntryPrint
+from core.model.currency import Currency, USD
 from core.model.date import clean_format
 
 # Force to collect modules normally missing by the dependencies collector.
@@ -46,7 +47,6 @@ class PyMoneyGuruApp(PyBaseApp):
         logging.debug('started in debug mode')
         cache_path = op.join(proxy.getCachePath(), 'moneyGuru')
         appdata_path = op.join(proxy.getAppdataPath(), 'moneyGuru')
-        plugin_model_path = op.join(proxy.getResourcePath(), 'plugin_examples')
         currency_code = nonone(proxy.systemCurrency(), 'USD')
         logging.info('Currency code: {0}'.format(currency_code))
         try:
@@ -63,7 +63,7 @@ class PyMoneyGuruApp(PyBaseApp):
         logging.info('System numeric separators: %s and %s' % (grouping_sep, decimal_sep))
         model = Application(self, date_format=date_format, decimal_sep=decimal_sep,
             grouping_sep=grouping_sep, default_currency=system_currency, cache_path=cache_path,
-            appdata_path=appdata_path, plugin_model_path=plugin_model_path)
+            appdata_path=appdata_path)
         PyBaseApp.__init__(self, model)
 
     #--- Public
@@ -420,6 +420,12 @@ class PyAccountPanel(PyPanel):
     def setAccountNumber_(self, accountNumber: str):
         self.model.account_number = accountNumber
 
+    def isInactive(self) -> bool:
+        return self.model.inactive
+
+    def setInactive_(self, inactive: bool):
+        self.model.inactive = inactive
+    
     def notes(self) -> str:
         return self.model.notes
 
@@ -830,6 +836,7 @@ class PyLookup(PyGUIObject):
 #--- Views
 class BaseViewView:
     def updateVisibility(self): pass
+    def createPanelWithModelRef_name_(self, pyref: pyref, name: str) -> pyref: pass
 
 class PyBaseView(PyGUIObject):
     def mainwindow(self) -> pyref:
@@ -839,6 +846,11 @@ class PyBaseView(PyGUIObject):
         return list(self.model.mainwindow.hidden_areas)
 
     #--- Python --> Cocoa
+    @dontwrap
+    def get_panel_view(self, model):
+        name = model.__class__.__name__
+        return self.callback.createPanelWithModelRef_name_(model, name)
+
     @dontwrap
     def restore_subviews_size(self):
         # Under Cocoa, we don't use this because all views are created after the document opening.
@@ -947,6 +959,10 @@ class PyDocPropsView(PyBaseView):
         return self.model.year_start_month_list
 
 
+class PyPluginListView(PyBaseView):
+    def table(self) -> pyref:
+        return self.model.table
+
 class PyEmptyView(PyBaseView):
     def pluginList(self) -> pyref:
         return self.model.plugin_list
@@ -965,6 +981,7 @@ class PyReadOnlyPluginView(PyBaseView):
 
 class MainWindowView(GUIObjectView):
     def changeSelectedPane(self): pass
+    def createPanelWithModelRef_name_(self, pyref: pyref, name: str) -> pyref: pass
     def refreshPanes(self): pass
     def refreshStatusLine(self): pass
     def refreshUndoActions(self): pass
@@ -995,30 +1012,6 @@ class PyMainWindow(PyGUIObject):
 
     def completionLookup(self) -> pyref:
         return self.model.completion_lookup
-
-    def accountPanel(self) -> pyref:
-        return self.model.account_panel
-
-    def transactionPanel(self) -> pyref:
-        return self.model.transaction_panel
-
-    def massEditPanel(self) -> pyref:
-        return self.model.mass_edit_panel
-
-    def budgetPanel(self) -> pyref:
-        return self.model.budget_panel
-
-    def schedulePanel(self) -> pyref:
-        return self.model.schedule_panel
-
-    def customDateRangePanel(self) -> pyref:
-        return self.model.custom_daterange_panel
-
-    def accountReassignPanel(self) -> pyref:
-        return self.model.account_reassign_panel
-
-    def exportPanel(self) -> pyref:
-        return self.model.export_panel
 
     def importWindow(self) -> pyref:
         return self.model.import_window
@@ -1128,6 +1121,11 @@ class PyMainWindow(PyGUIObject):
         self.callback.changeSelectedPane()
 
     @dontwrap
+    def get_panel_view(self, model):
+        name = model.__class__.__name__
+        return self.callback.createPanelWithModelRef_name_(model, name)
+
+    @dontwrap
     def refresh_panes(self):
         self.callback.refreshPanes()
 
@@ -1212,7 +1210,8 @@ class PyImportWindow(PyGUIObject):
         return len(self.model.panes)
 
     def performSwap_(self, applyToAll: bool):
-        self.model.perform_swap(apply_to_all=applyToAll)
+        apply = ActionSelectionOptions.ApplyToAll if applyToAll else ActionSelectionOptions.ApplyToPane
+        self.model.perform_swap(apply=apply)
 
     def selectedTargetAccountIndex(self) -> int:
         return self.model.selected_target_account_index

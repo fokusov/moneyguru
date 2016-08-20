@@ -1,12 +1,8 @@
-# Created By: Virgil Dupras
-# Created On: 2008-06-15
-# Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+# Copyright 2016 Virgil Dupras
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
-
-import time
 
 from hscommon.testutil import eq_
 
@@ -14,35 +10,61 @@ from .base import TestApp, with_app
 from ..model.account import AccountType
 
 # a little helper that creates a completable edit, sets the text and returns the completion
-def complete_etable(app, value, attrname):
-    ce = app.aview.etable.completable_edit
+def complete_table(target_table, value, attrname):
+    ce = target_table.completable_edit
     ce.attrname = attrname
     ce.text = value
     return ce.completion
 
-#--- One empty account
-def app_one_empty_account():
+def complete_etable(app, value, attrname):
+    return complete_table(app.aview.etable, value, attrname)
+
+def assert_completion(app, s, expected):
+    eq_(complete_etable(app, s, 'transfer'), expected)
+
+# ---
+def test_complete_transfer_one_empty_account():
+    # Don't lookup the selected account for transfer completion.
     app = TestApp()
     app.add_account('Checking')
     app.show_account()
-    return app
+    assert_completion(app, 'c', '')
 
-#--- Empty account with whitespace in name
-def app_empty_account_with_whitespace_in_name():
+def test_dont_complete_with_inactive_accounts():
+    # Inactive accounts don't show in in auto-completion. ref #412
     app = TestApp()
+    app.add_account('inactive', inactive=True)
+    tview = app.show_tview()
+    eq_(complete_table(tview.ttable, 'i', 'from'), '')
+
+# --- Empty account with whitespace in name
+def app_empty_account_with_whitespace_in_name(monkeypatch):
+    app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_account('  Foobar  ')
     app.add_account('foobaz')
     app.show_account()
     return app
 
-#--- Three empty accounts
-def app_three_empty_accounts():
+@with_app(app_empty_account_with_whitespace_in_name)
+def test_complete_transfer_empty_account_with_whitespace_in_name(app):
+    # transfer completion looking up account names ignores whitespaces (and case).
+    assert_completion(app, 'f', 'oobar')
+
+# --- Three empty accounts
+def app_three_empty_accounts(monkeypatch):
     app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_account('one')
     app.add_account('two')
     app.add_account('three') # This is the selected account (in second position)
     app.show_account()
     return app
+
+@with_app(app_three_empty_accounts)
+def test_complete_transfer_three_empty_accounts(app):
+    # When no entry match for transfer completion, lookup in accounts.
+    assert_completion(app, 'o', 'ne')
 
 @with_app(app_three_empty_accounts)
 def test_complete_empty_transfer(app):
@@ -54,24 +76,37 @@ def test_complete_description(app):
     # description completion does *not* look into accounts.
     eq_(complete_etable(app, 'o', 'description'), '')
 
-#--- Income account shown
-def app_income_account_shown():
+# --- Income account shown
+def app_income_account_shown(monkeypatch):
     app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_account('foobar', account_type=AccountType.Income)
     app.show_account()
     return app
 
-#--- Different account types
-def app_different_account_types():
+@with_app(app_income_account_shown)
+def test_complete_transfer_income_account_shown(app):
+    # Ignore selected account in completion in cases where non-asset accounts are shown as well.
+    assert_completion(app, 'f', '')
+
+# --- Different account types
+def app_different_account_types(monkeypatch):
     app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_account('income', account_type=AccountType.Income)
     app.add_account('asset')
     app.show_account()
     return app
 
-#--- Entry in editing mode
-def app_entry_in_editing_mode():
+@with_app(app_different_account_types)
+def test_complete_transfer_different_account_types(app):
+    # Complete transfer with non-asset categories as well.
+    assert_completion(app, 'in', 'come')
+
+# --- Entry in editing mode
+def app_entry_in_editing_mode(monkeypatch):
     app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_account()
     app.show_account()
     app.etable.add()
@@ -86,9 +121,10 @@ def test_complete(app):
     # Don't make completion match with the edited entry.
     eq_(complete_etable(app, 'foo', 'description'), '')
 
-#--- One entry
-def app_one_entry():
+# --- One entry
+def app_one_entry(monkeypatch):
     app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_account('Checking')
     app.show_account()
     app.add_entry('10/10/2007', 'Deposit', payee='Payee', transfer='Salary', increase='42')
@@ -205,9 +241,22 @@ def test_field_completion_on_set_entry_payee(app):
     eq_(app.etable[selected].description, 'Deposit')
     eq_(app.etable[selected].transfer, 'Salary')
 
-#--- Entry with blank description
-def app_entry_with_blank_description():
+@with_app(app_one_entry)
+def test_dont_complete_with_inactive_account_with_transactions(app):
+    # Make sure that we don't complete inactive accounts with transactions. We would previously
+    # have a cache glitch in the case we made an existing account with txns inactive.
+    # This first check is to populate the completion cache
+    tview = app.show_tview()
+    eq_(complete_table(tview.ttable, 's', 'from'), 'alary')
+    app.select_account('Salary')
+    app.change_selected_account(inactive=True)
+    tview = app.show_tview()
+    eq_(complete_table(tview.ttable, 's', 'from'), '')
+
+# --- Entry with blank description
+def app_entry_with_blank_description(monkeypatch):
     app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_account()
     app.show_account()
     app.add_entry('10/10/2007', description='', transfer='Salary', increase='42')
@@ -229,9 +278,10 @@ def test_complete_empty_string(app):
     # complete() always returns nothing on empty strings.
     eq_(complete_etable(app, '', 'description'), '')
 
-#--- Entry with whitespace in description
-def app_entry_with_whitespace_in_description():
+# --- Entry with whitespace in description
+def app_entry_with_whitespace_in_description(monkeypatch):
     app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_account()
     app.show_account()
     app.add_entry('10/10/2007', description='  foobar  ', increase='1')
@@ -247,9 +297,10 @@ def test_completion_strip_whitespace(app):
     # Ignore whitespace when finding a completion match.
     eq_(complete_etable(app, 'foo', 'description'), 'bar')
 
-#--- Two entries
-def app_two_entries():
+# --- Two entries
+def app_two_entries(monkeypatch):
     app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_account()
     app.show_account()
     app.add_entry('2/10/2007', 'first', increase='102.00')
@@ -273,9 +324,10 @@ def test_amount_completion_already_set(app):
     row.description = 'second'
     eq_(app.etable[app.etable.selected_indexes[0]].increase, '102.00')
 
-#--- Three entries in two account types
-def app_three_entries_in_two_account_types():
+# --- Three entries in two account types
+def app_three_entries_in_two_account_types(monkeypatch):
     app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_account()
     app.show_account()
     app.add_entry(description='first')
@@ -290,12 +342,12 @@ def test_completion_from_other_accounts_show_up(app):
     # Even in the entry table, completion from other accounts show up
     eq_(complete_etable(app, 'f', 'description'), 'irst')
 
-#--- Four entries with description and category collision
+# --- Four entries with description and category collision
 def app_four_entries_with_description_and_category_collision(monkeypatch):
     # Four entries. Mostly for completion, I can't see any other use. The first is a 'booby trap'.
     # (simply having the completion iterate the list made all tests pass). The second is the base
-    # entry. The third has the same description but a different transfer. The fourth has a different 
-    # transfer but the same description. All have different amounts and dates. Second entry is 
+    # entry. The third has the same description but a different transfer. The fourth has a different
+    # transfer but the same description. All have different amounts and dates. Second entry is
     # selected. Also, time.time() is mocked so that the time of the setUp is earlier than the time
     # of the tests.
     app = TestApp()
@@ -427,7 +479,7 @@ def test_next_completion_rollover(app):
 
 @with_app(app_four_entries_with_description_and_category_collision)
 def test_next_completion_rollover_plus_one(app):
-    # An easy way out for all the other tests was to use negative indexing. But it stops 
+    # An easy way out for all the other tests was to use negative indexing. But it stops
     # working here.
     ce = app.completable_edit('description')
     ce.text = 'd'
@@ -509,40 +561,18 @@ def test_persistence_of_completion(app, tmpdir, monkeypatch):
     app.show_account()
     assert_completion_order_changed(app)
 
-#--- Account created through transaction table
-def app_account_created_through_transaction_table():
+# --- Account created through transaction table
+def app_account_created_through_transaction_table(monkeypatch):
     app = TestApp()
+    monkeypatch.patch_time_ticking()
     app.add_txn(from_='foo', to='bar', amount='42')
     app.ttable.show_from_account()
     app.link_aview()
     return app
 
-#--- Generators
-def test_complete_transfer():
-    def check(app, s, expected):
-        eq_(complete_etable(app, s, 'transfer'), expected)
-    
-    # Don't lookup the selected account for transfer completion.
-    app = app_one_empty_account()
-    yield check, app, 'c', ''
-    
-    # transfer completion looking up account names ignores whitespaces (and case).
-    app = app_empty_account_with_whitespace_in_name()
-    yield check, app, 'f', 'oobar'
-    
-    # When no entry match for transfer completion, lookup in accounts.
-    app = app_three_empty_accounts()
-    yield check, app, 'o', 'ne'
-    
-    # Ignore selected account in completion in cases where non-asset accounts are shown as well.
-    app = app_income_account_shown()
-    yield check, app, 'f', ''
-    
-    # Complete transfer with non-asset categories as well.
-    app = app_different_account_types()
-    yield check, app, 'in', 'come'
-    
-    # Completion correctly excludes shown account on the transfer column. Previously, 
+@with_app(app_account_created_through_transaction_table)
+def test_complete_transfer_account_created_through_transaction_table(app):
+    # Completion correctly excludes shown account on the transfer column. Previously,
     # selected_account was used instead of shown_account.
-    app = app_account_created_through_transaction_table()
-    yield check, app, 'f', ''
+    assert_completion(app, 'f', '')
+

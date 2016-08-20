@@ -1,17 +1,17 @@
 # Created By: Virgil Dupras
 # Created On: 2009-04-12
 # Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 from hscommon.testutil import eq_
-from hscommon.currency import USD, EUR
 
+from ...model.currency import USD, EUR
 from ..base import TestApp, with_app
 
-#--- Deleting second account
+# --- Deleting second account
 def app_deleting_second_account():
     app = TestApp()
     app.add_accounts('one', 'two')
@@ -25,8 +25,9 @@ def app_deleting_second_account():
 @with_app(app_deleting_second_account)
 def test_available_accounts(app):
     # the available accounts in arpanel are No Account, one and three
+    arpanel = app.get_current_panel()
     expected = ['No Account', 'one', 'three']
-    eq_(app.arpanel.account_list[:], expected)
+    eq_(arpanel.account_list[:], expected)
 
 @with_app(app_deleting_second_account)
 def test_no_delete_took_place(app):
@@ -36,8 +37,9 @@ def test_no_delete_took_place(app):
 @with_app(app_deleting_second_account)
 def test_reassign_to_one(app):
     # choosing 'one' and continuing reassigns two's entry to one.
-    app.arpanel.account_list.select(1) # one
-    app.arpanel.save()
+    arpanel = app.get_current_panel()
+    arpanel.account_list.select(1) # one
+    arpanel.save()
     eq_(len(app.bsheet.assets), 3) # now, it's deleted
     app.bsheet.selected = app.bsheet.assets[0]
     app.show_account()
@@ -45,7 +47,7 @@ def test_reassign_to_one(app):
     eq_(app.etable[0].transfer, 'three')
     eq_(app.etable[0].increase, '42.00') # got the right side of the txn
 
-#--- Different currencies
+# --- Different currencies
 def app_different_currencies_reconciled_entries():
     app = TestApp()
     app.add_account('one', currency=USD)
@@ -69,12 +71,13 @@ def app_different_currencies_reconciled_entries():
 def test_reassign_to_account_with_different_currency(app):
     # When re-assigning transactions to a different account, de-reconcile them if the account is
     # of a different currency or else we get a crash when we compute the balance.
-    app.arpanel.account_list.select(1) # one
-    app.arpanel.save() # no crash
+    arpanel = app.get_current_panel()
+    arpanel.account_list.select(1) # one
+    arpanel.save() # no crash
     app.show_account('one')
     eq_(app.etable_count(), 2)
 
-#---
+# ---
 def app_three_accounts_two_entries():
     app = TestApp()
     app.add_accounts('acc1', 'acc2', 'acc3')
@@ -89,4 +92,5 @@ def test_delete_two_accounts_at_once_and_reassign(app):
     app.bsheet.selected_nodes = app.bsheet.assets[:2]
     app.bsheet.delete() # arpanel popping up.
     expected = ['No Account', 'acc3']
-    eq_(app.arpanel.account_list[:], expected)
+    arpanel = app.get_current_panel()
+    eq_(arpanel.account_list[:], expected)

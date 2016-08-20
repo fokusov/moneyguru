@@ -1,24 +1,21 @@
-# Created By: Virgil Dupras
-# Created On: 2009-12-27
-# Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+# Copyright 2016 Virgil Dupras
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 from datetime import date
 
 from hscommon.testutil import eq_
-from hscommon.currency import Currency, CAD
 
 from ..document import ScheduleScope
 from ..model.account import AccountType
+from ..model.currency import Currency, CAD
 from ..model.date import MonthRange
 from .base import compare_apps, TestApp, with_app, testdata
 
-PLN = Currency(code='PLN')
 
-#--- Pristine
+# --- Pristine
 def test_dont_save_invalid_xml_characters(tmpdir):
     # It's possible that characters that are invalid in an XML file end up in a moneyGuru document
     # (mostly through imports). Don't let this happen.
@@ -39,7 +36,7 @@ def test_saved_file_starts_with_xml_header(tmpdir):
     contents = fp.read()
     assert contents.startswith('<?xml version="1.0" encoding="utf-8"?>\n')
 
-#---
+# ---
 class TestLoadFile:
     # Loads 'simple.moneyguru', a file with 2 accounts and 2 entries in each. Select the first entry.
     def do_setup(self, monkeypatch):
@@ -51,37 +48,39 @@ class TestLoadFile:
         app.bsheet.selected = app.bsheet.assets[0]
         app.show_account()
         return app
-    
+
     @with_app(do_setup)
     def test_add_entry(self, app):
         # Adding an entry sets the modified flag.
         app.add_entry()
         assert app.doc.is_dirty()
-    
+
     @with_app(do_setup)
     def test_change_account_currency(self, app):
         # Changing an account currency sets the modified flag.
+        PLN = Currency(code='PLN')
         app.show_nwview()
-        app.mainwindow.edit_item()
-        app.apanel.currency = PLN
-        app.apanel.save()
+        apanel = app.mainwindow.edit_item()
+        apanel.currency = PLN
+        apanel.save()
         assert app.doc.is_dirty()
-    
+
     @with_app(do_setup)
     def test_delete_account(self, app):
         # Removing an account sets the modified flag.
         app.show_nwview()
         app.bsheet.selected = app.bsheet.assets[0]
         app.bsheet.delete()
-        app.arpanel.save() # continue deletion
+        arpanel = app.get_current_panel()
+        arpanel.save() # continue deletion
         assert app.doc.is_dirty()
-    
+
     @with_app(do_setup)
     def test_delete_entries(self, app):
         # Deleting an entry sets the modified flag.
         app.etable.delete()
         assert app.doc.is_dirty()
-    
+
     @with_app(do_setup)
     def test_delete_transactions(self, app):
         # Deleting a transaction sets the modified flag.
@@ -89,15 +88,16 @@ class TestLoadFile:
         app.ttable.select([0]) # will be automatic at some point
         app.ttable.delete()
         assert app.doc.is_dirty()
-    
+
     @with_app(do_setup)
     def test_change_split(self, app):
         # Changing a split in the tpanel doesn't make the app dirty unless it's saved.
         app.etable.select([1])
-        app.tpanel.load()
-        app.stable.delete()
+        tpanel = app.mw.edit_item()
+        stable = tpanel.split_table
+        stable.delete()
         assert not app.doc.is_dirty()
-    
+
     @with_app(do_setup)
     def test_edit_entry(self, app):
         # When about to save the document, if an entry is in edition, the document saves the edits first
@@ -106,17 +106,17 @@ class TestLoadFile:
         assert app.doc.is_dirty() # We started editing, the flag is on
         app.etable.save_edits()
         assert app.doc.is_dirty()
-    
+
     @with_app(do_setup)
     def test_initial_selection(self, app):
         # Right after load, the last entry is selected.
         eq_(app.etable.selected_indexes, [1])
-    
+
     @with_app(do_setup)
     def test_not_modified(self, app):
         # Loading a file resets the modified flag.
         assert not app.doc.is_dirty()
-    
+
     @with_app(do_setup)
     def test_rename_account(self, app):
         # Renaming an account sets the modified flag.
@@ -125,13 +125,13 @@ class TestLoadFile:
         app.bsheet.selected.name = 'some other name'
         app.bsheet.save_edits()
         assert app.doc.is_dirty()
-    
+
     @with_app(do_setup)
     def test_save_edit_without_edit(self, app):
         # Calling save_entry() without having made changes doesn't set the modified flag.
         app.etable.save_edits()
         assert not app.doc.is_dirty()
-    
+
 
 class TestLoadTwice:
     def do_setup(self):
@@ -140,14 +140,14 @@ class TestLoadTwice:
         app.doc.load_from_xml(testdata.filepath('moneyguru', 'simple.moneyguru'))
         app.doc.load_from_xml(testdata.filepath('moneyguru', 'simple.moneyguru'))
         return app
-    
+
     @with_app(do_setup)
     def test_save_load(self, app):
         # make sure that loading completely wipes out previous transactions (If it doesn't, old
         # transaction end up in the save file, making them being re-added to the account in the next
         # load).
         app.do_test_save_load()
-    
+
 
 class TestLoadMultiCurrency:
     def do_setup(self):
@@ -160,19 +160,20 @@ class TestLoadMultiCurrency:
         app.show_account()
         app.etable.select([0])
         return app
-    
+
     @with_app(do_setup)
     def test_amounts(self, app):
         # The amounts are correctly loaded and the logical imbalance has been dealt with.
         eq_(app.etable[0].increase, '200.00')
-        app.tpanel.load()
-        eq_(len(app.stable), 4)
-        eq_(app.stable[0].debit, '200.00')
-        eq_(app.stable[1].debit, 'PLN 123.45')
+        tpanel = app.mw.edit_item()
+        stable = tpanel.split_table
+        eq_(len(stable), 4)
+        eq_(stable[0].debit, '200.00')
+        eq_(stable[1].debit, 'PLN 123.45')
         expected = set(['200.00', 'PLN 123.45'])
-        assert app.stable[2].credit in expected
-        assert app.stable[3].credit in expected
-    
+        assert stable[2].credit in expected
+        assert stable[3].credit in expected
+
 
 class TestLoadPayeeDescription:
     def do_setup(self):
@@ -181,7 +182,7 @@ class TestLoadPayeeDescription:
         app.doc.load_from_xml(testdata.filepath('moneyguru', 'payee_description.moneyguru'))
         app.show_tview()
         return app
-    
+
     @with_app(do_setup)
     def test_attributes(self, app):
         # description and payee attributes load correctly, even when some of them are missing.
@@ -191,13 +192,14 @@ class TestLoadPayeeDescription:
         eq_(app.ttable[1].payee, '')
         eq_(app.ttable[2].description, '')
         eq_(app.ttable[2].payee, 'payee')
-    
+
 
 class TestTwoAccountTwoEntriesInEachWithNonAsciiStrings:
     def do_setup(self):
         # Two accounts, two entries in each. Descriptions, categories and account names contain
         # non-latin characters (a polish 'l'). currencies are set to non-default values. first account
         # is selected.
+        PLN = Currency(code='PLN')
         app = TestApp()
         app.add_account('first_account\u0142', currency=PLN)
         app.show_account()
@@ -208,16 +210,16 @@ class TestTwoAccountTwoEntriesInEachWithNonAsciiStrings:
         app.add_entry('5/10/2007', 'third\u0142', transfer='first_account\u0142', decrease='1 usd')
         app.add_entry('6/10/2007', 'fourth\u0142', transfer='yet another account', decrease='2 usd')
         return app
-    
+
     @with_app(do_setup)
     def test_save_load(self, app):
         # make sure all those values come back up alright
         app.do_test_save_load()
-    
+
     @with_app(do_setup)
     def test_qif_export_import(self, app):
         app.do_test_qif_export_import()
-    
+
 
 class TestLoadInvalidAccountType:
     def do_setup(self):
@@ -225,13 +227,13 @@ class TestLoadInvalidAccountType:
         app = TestApp()
         app.doc.load_from_xml(testdata.filepath('moneyguru', 'invalid_account_type.moneyguru'))
         return app
-    
+
     @with_app(do_setup)
     def test_account_type(self, app):
         # The account with the invalid type is imported as an asset account.
         app.show_nwview()
         eq_(app.bsheet.assets.children_count, 3)
-    
+
 
 class TestLoadImportWithTransactionInTheFuture:
     def do_setup(self, monkeypatch):
@@ -239,12 +241,12 @@ class TestLoadImportWithTransactionInTheFuture:
         app = TestApp()
         app.mw.parse_file_for_import(testdata.filepath('moneyguru', 'simple.moneyguru'))
         return app
-    
+
     @with_app(do_setup)
     def test_transactions_show_up(self, app):
         # even when there are txns in the future, they show up in the import panel
         eq_(len(app.itable), 2)
-    
+
 
 class TestLoadWithReferences1:
     def do_setup(self, monkeypatch):
@@ -253,7 +255,7 @@ class TestLoadWithReferences1:
         app = TestApp()
         app.doc.load_from_xml(testdata.filepath('moneyguru', 'with_references1.moneyguru'))
         return app
-    
+
     @with_app(do_setup)
     def test_reconciliation(self, app):
         # legacy boolean reconciliation was correctly loaded
@@ -263,17 +265,17 @@ class TestLoadWithReferences1:
         # 2 entries, first is not reconciled, second is.
         assert not app.etable[0].reconciled
         assert app.etable[1].reconciled
-    
 
-#--- All app functions below are tested in the following test generators
+
+# --- All app functions below are tested in the following test generators
 def app_account_with_budget():
     app = TestApp()
     app.add_account('asset')
     app.add_account('income', account_type=AccountType.Income)
     app.add_budget('income', 'asset', '400')
-    app.mainwindow.edit_item()
-    app.bpanel.notes = 'foobar'
-    app.bpanel.save()
+    bpanel = app.mainwindow.edit_item()
+    bpanel.notes = 'foobar'
+    bpanel.save()
     return app
 
 def app_transaction_with_payee_and_checkno():
@@ -281,9 +283,9 @@ def app_transaction_with_payee_and_checkno():
     app.add_account('Checking')
     app.add_txn('10/10/2007', 'Deposit', payee='Payee', from_='Salary', to='Checking',
         amount='42.00', checkno='42')
-    app.mainwindow.edit_item()
-    app.tpanel.notes = 'foobar\nfoobaz'
-    app.tpanel.save()
+    tpanel = app.mainwindow.edit_item()
+    tpanel.notes = 'foobar\nfoobaz'
+    tpanel.save()
     return app
 
 def app_entry_with_blank_description():
@@ -306,16 +308,17 @@ def app_transaction_with_memos():
     app.add_account('second')
     app.show_tview()
     app.ttable.add()
-    app.tpanel.load()
-    app.stable[0].account = 'first'
-    app.stable[0].memo = 'memo1'
-    app.stable[0].credit = '42'
-    app.stable.save_edits()
-    app.stable.select([1])
-    app.stable[1].account = 'second'
-    app.stable[1].memo = 'memo2'
-    app.stable.save_edits()
-    app.tpanel.save()
+    tpanel = app.mw.edit_item()
+    stable = tpanel.split_table
+    stable[0].account = 'first'
+    stable[0].memo = 'memo1'
+    stable[0].credit = '42'
+    stable.save_edits()
+    stable.select([1])
+    stable[1].account = 'second'
+    stable[1].memo = 'memo2'
+    stable.save_edits()
+    tpanel.save()
     return app
 
 def app_entry_in_liability():
@@ -330,12 +333,13 @@ def app_split_with_null_amount():
     app.add_account('foo')
     app.show_account()
     app.add_entry(date='2/1/2007', description='Split', transfer='bar')
-    app.tpanel.load()
-    app.stable.add()
-    row = app.stable.selected_row
+    tpanel = app.mw.edit_item()
+    stable = tpanel.split_table
+    stable.add()
+    row = stable.selected_row
     row.account = 'baz'
-    app.stable.save_edits()
-    app.tpanel.save()
+    stable.save_edits()
+    tpanel.save()
     return app
 
 def app_one_account_and_one_group():
@@ -360,10 +364,11 @@ def app_budget_with_all_fields_set():
 def app_account_with_apanel_attrs():
     app = TestApp()
     app.add_account()
-    app.mw.edit_item()
-    app.apanel.account_number = '1234'
-    app.apanel.notes = 'some\nnotes'
-    app.apanel.save()
+    apanel = app.mw.edit_item()
+    apanel.account_number = '1234'
+    apanel.inactive = True
+    apanel.notes = 'some\nnotes'
+    apanel.save()
     return app
 
 def app_one_schedule_and_one_normal_txn():
@@ -400,8 +405,8 @@ def app_schedule_with_local_deletion(monkeypatch):
 def app_schedule_made_from_txn():
     app = TestApp()
     app.add_txn('11/07/2008', 'description', 'payee', from_='first', to='second', amount='42')
-    app.mw.make_schedule_from_selected()
-    app.scpanel.save()
+    scpanel = app.mw.make_schedule_from_selected()
+    scpanel.save()
     return app
 
 def app_account_and_group():
@@ -424,55 +429,55 @@ def test_save_load(tmpdir, monkeypatch):
         newapp.doc.date_range = app.doc.date_range
         newapp.doc._cook()
         compare_apps(app.doc, newapp.doc)
-    
+
     app = app_account_with_budget()
     check(app)
-    
+
     app = app_transaction_with_payee_and_checkno()
     check(app)
-    
+
     app = app_entry_with_blank_description()
     check(app)
-    
+
     # make sure that groups are saved
     app = app_account_in_group()
     check(app)
-    
+
     # Make sure memos are loaded/saved
     app = app_transaction_with_memos()
     check(app)
-    
+
     # make sure that empty groups are kept when saving/loading
     app = app_one_account_and_one_group()
     check(app)
-    
+
     # make sure that groups are saved
     app = app_one_account_in_one_group()
     check(app)
-    
+
     # make sure that all budget fields are correctly saved
     app = app_budget_with_all_fields_set()
     check(app)
-    
+
     # apanel attributes are saved/loaded
     app = app_account_with_apanel_attrs()
     check(app)
-    
+
     # The native loader was loading the wrong split element into the Recurrence's
     # ref txn. So the recurrences were always getting splits from the last loaded normal txn
     app = app_one_schedule_and_one_normal_txn()
     check(app)
-    
+
     app = app_schedule_with_global_change(monkeypatch)
     check(app)
-    
+
     app = app_schedule_with_local_deletion(monkeypatch)
     check(app)
-    
+
     # The first spawn (corresponding to the original txn) is still skipped when we save/load
     app_schedule_made_from_txn()
     check(app)
-    
+
     # make sure that empty groups are kept when saving/loading
     app = app_account_and_group()
     check(app)
@@ -481,8 +486,9 @@ def test_save_load_qif(tmpdir):
     def check(app):
         filepath = str(tmpdir.join('foo.qif'))
         app.mw.export()
-        app.expanel.export_path = filepath
-        app.expanel.save()
+        expanel = app.get_current_panel()
+        expanel.export_path = filepath
+        expanel.save()
         app.doc.close()
         newapp = TestApp()
         newapp.mw.parse_file_for_import(filepath)
@@ -491,18 +497,36 @@ def test_save_load_qif(tmpdir):
         newapp.doc.date_range = app.doc.date_range
         newapp.doc._cook()
         compare_apps(app.doc, newapp.doc, qif_mode=True)
-    
+
     app = app_transaction_with_payee_and_checkno()
     check(app)
-    
+
     # Make sure memos are loaded/saved
     app = app_transaction_with_memos()
     check(app)
-    
+
     # make sure liability accounts are exported/imported correctly.
     app = app_entry_in_liability()
     check(app)
-    
+
     # Splits with null amount are saved/loaded
     app = app_split_with_null_amount()
     check(app)
+
+class TestLoadOffCurrencyReconciliations:
+    def do_setup(self, monkeypatch):
+        monkeypatch.patch_today(2015, 10, 26) # so that the entries are shown
+        app = TestApp()
+        app.doc.load_from_xml(testdata.filepath('moneyguru', 'off_currency_reconciliations.moneyguru'))
+        app.show_nwview()
+        app.bsheet.selected = app.bsheet.assets[0]
+        app.show_account()
+        return app
+
+    @with_app(do_setup)
+    def test_attributes(self, app):
+        # issue #442 off-currency reconciled splits should be un-reconciled at load
+        eq_(app.etable[1].description, 'Money going out')
+        eq_(app.etable[1].reconciliation_date, '')
+        eq_(app.etable[3].description, 'Money going nowhere')
+        eq_(app.etable[3].reconciliation_date, '26/10/2015')

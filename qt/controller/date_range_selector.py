@@ -6,8 +6,8 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import QObject
-from PyQt4.QtGui import QMenu, QAction
+from PyQt5.QtCore import QObject
+from PyQt5.QtWidgets import QMenu, QAction
 
 from hscommon.trans import trget
 
@@ -101,7 +101,7 @@ class DateRangeSelector(QObject):
         self.view.prevButton.clicked.connect(self.model.select_prev_date_range)
         self.view.nextButton.clicked.connect(self.model.select_next_date_range)
 
-    #--- Event Handlers
+    # --- Event Handlers
     def custom1Triggered(self):
         self.model.select_saved_range(0)
 
@@ -111,7 +111,7 @@ class DateRangeSelector(QObject):
     def custom3Triggered(self):
         self.model.select_saved_range(2)
 
-    #--- model --> view
+    # --- model --> view
     def animate_backward(self):
         # I didn't find a way to have a nice fading effect like we do on the Cocoa side in Qt.
         # The animation framework seems to be mainly for the QGraphicsScene framework. Since QWidget

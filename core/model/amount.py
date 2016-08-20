@@ -1,16 +1,16 @@
 # Created By: Eric Mc Sween
 # Created On: 2007-12-13
 # Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 import os
 import re
 from itertools import groupby
 
-from hscommon.currency import Currency
+from .currency import Currency
 
 try:
     if os.environ.get('USE_PY_AMOUNT'):
@@ -19,6 +19,12 @@ try:
 except ImportError:
     print("Using amount_ref")
     from ._amount_ref import Amount
+
+class UnsupportedCurrencyError(ValueError):
+    """We're trying to parse an amount specifying an unsupported currency."""
+    def __init__(self, currency):
+        self.currency = currency
+        ValueError.__init__(self, "Unsupported currency: {}".format(currency))
 
 re_arithmetic_operators = re.compile(r"[+\-*/()]")
 re_not_arithmetic_operators = re.compile(r"[^+\-*/()]+")
@@ -40,21 +46,21 @@ def format_amount(
         amount, default_currency=None, blank_zero=False, zero_currency=None, decimal_sep='.',
         grouping_sep=''):
     """Returns a formatted string from ``amount``.
-    
+
     From a regular amount, will return (depending on the options of course), something like
     "CAD 42.54", or maybe only "42.54".
-    
+
     This all depends on ``default_currency``, which is a settings in moneyGuru which we pass onto
     this function. To lighten the UI a bit, moneyGuru only displays "foreign" (non-default)
     currencies in amounts. Therefore, if ``amount.currency`` is the same as ``default_currency``, we
     don't include our amount currency code in our result.
-    
+
     When amount is null (zero), we don't display currency code because, well, nothingness doesn't
     have a currency.
-    
+
     Another caveat: The number of digits we print depends on our currency's
     :attr:`exponent <.Currency.exponent>` (most of the time 2, but sometimes 0 or 3).
-    
+
     :param default_currency: The user's "native" currency.
     :type default_currency: :class:`.Currency`.
     :param bool blank_zero: If amount is zero, return ``''`` instead of ``0.00``.
@@ -63,7 +69,7 @@ def format_amount(
     :type zero_currency: :class:`.Currency`.
     :param str decimal_sep: The decimal separator to use for formatting.
     :param str grouping_sep: The thousands separator to use for formatting.
-    
+
     .. seealso:: :doc:`/currencies`
     """
     if amount is None:
@@ -115,15 +121,15 @@ def parse_amount_expression(string, exponent):
         else:
             repl_exponent = exponent
             hadfirstmatch = True
-        parsed = parse_amount_single(s, repl_exponent, auto_decimal_place=False)
+        parsed = parse_amount_single(s, repl_exponent, auto_decimal_place=False, parens_for_negatives=False)
         fmt = '{{:1.{}f}}'.format(repl_exponent)
         return fmt.format(parsed)
-    
+
     hadfirstmatch = False
     result = re_not_arithmetic_operators.sub(repl, string)
     return result
 
-def parse_amount_single(string, exponent, auto_decimal_place):
+def parse_amount_single(string, exponent, auto_decimal_place, parens_for_negatives=True):
     # Parse a string which contains a single amount (not an expression) and return a float
     # Now, we have a string that might have thousand separators and might or might not have
     # a decimal separator, which might be either "," or ".". We'll first find our decimal sep
@@ -148,29 +154,42 @@ def parse_amount_single(string, exponent, auto_decimal_place):
         if m is None:
             raise ValueError("'{}' is not an amount".format(string))
         value = float(string[m.start():m.end()])
-        if '-' in string[:m.start()]:
+        # Handle negative amounts either starting with a minus sign or surrounded
+        # by parenthasis, which is used frequently to denote a negative in finance.
+        # e.g. -12.30 == (12.30), if we're allowing parens to be used for negative
+        # values.
+        is_negative = '-' in string[:m.start()]
+        if not is_negative and parens_for_negatives:
+            is_negative = '(' in string[:m.start()] and ')' in string[m.end():]
+        if is_negative:
             value = -value
     return value
 
-def parse_amount(string, default_currency=None, with_expression=True, auto_decimal_place=False):
+def parse_amount(
+        string, default_currency=None, with_expression=True, auto_decimal_place=False,
+        strict_currency=False):
     """Returns an :class:`Amount` from ``string``.
-    
+
     We can parse strings like "42.54 cad" or "CAD 42.54".
-    
+
     If ``default_currency`` is set, we can parse amounts that don't contain a currency code and will
     give the amount that currency.
-    
+
     If ``with_expression`` is true, we can parse stuff like "42*4 cad" or "usd (1+2)/3". If you know
     your string doesn't contain any expression, turn this flag off to greatly speed up parsing.
-    
+
     ``auto_decimal_place`` allows for quick decimal-less typing. We assume that the number has been
     typed to the last precision digit and automatically place our decimal separator if there isn't
     one. For example, "1234" would be parsed as "12.34" in a CAD context (in BHD, a currency with 3
     digits, it would be parsed as "1.234"). This doesn't work with expressions.
+
+    With ``strict_currency`` enabled, ``UnsupportedCurrencyError`` is raised if an unsupported
+    currency is specified. We still parse sucessfully if no currency is specified and
+    ``default_currency`` is not ``None``.
     """
     if string is None or not string.strip():
         return 0
-    
+
     currency = None
     m = re_currency.search(string)
     if m is not None:
@@ -178,7 +197,8 @@ def parse_amount(string, default_currency=None, with_expression=True, auto_decim
         try:
             currency = Currency(capture)
         except ValueError:
-            pass
+            if strict_currency:
+                raise UnsupportedCurrencyError(capture)
         else:
             string = re_currency.sub('', string)
     currency = currency or default_currency
@@ -209,9 +229,9 @@ def parse_amount(string, default_currency=None, with_expression=True, auto_decim
 
 def convert_amount(amount, target_currency, date):
     """Returns ``amount`` converted to ``target_currency`` using ``date`` exchange rates.
-    
+
     .. seealso:: :meth:`.Currency.value_in`
-    
+
     :param amount: :class:`Amount`
     :param target_currency: :class:`.Currency`
     :param date: ``datetime.date``
@@ -226,12 +246,12 @@ def convert_amount(amount, target_currency, date):
 
 def prorate_amount(amount, spread_over_range, wanted_range):
     """Returns the prorated part of ``amount`` spread over ``spread_over_range`` for the ``wanted_range``.
-    
+
     For example, if 100$ are spead over a range that lasts 10 days (let's say between the 10th and
     the 20th) and that there's an overlap of 4 days between ``spread_over_range`` and
     ``wanted_range`` (let's say the 16th and the 26th), the result will be 40$. Why? Because each
     day is worth 10$ and we're wanting the value of 4 of those days.
-    
+
     :param amount: :class:`Amount`
     :param spread_over_range: :class:`.DateRange`
     :param wanted_range: :class:`.DateRange`
@@ -249,3 +269,4 @@ def same_currency(amount1, amount2):
 
 def of_currency(amount, currency):
     return not amount or amount.currency == currency
+

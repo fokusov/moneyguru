@@ -6,11 +6,11 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-import sys
 import os.path as op
 
-from PyQt4.QtCore import pyqtSignal, SIGNAL, QCoreApplication, QLocale, QUrl
-from PyQt4.QtGui import QDialog, QDesktopServices, QApplication, QMessageBox
+from PyQt5.QtCore import pyqtSignal, QCoreApplication, QLocale, QUrl, QStandardPaths
+from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtWidgets import QDialog, QApplication, QMessageBox
 
 from qtlib.about_box import AboutBox
 from qtlib.app import Application as ApplicationBase
@@ -23,13 +23,13 @@ from .controller.main_window import MainWindow
 from .controller.preferences_panel import PreferencesPanel
 from .support.date_edit import DateEdit
 from .preferences import Preferences
-from .plat import HELP_PATH, BASE_PATH
+from .plat import HELP_PATH
 
 class MoneyGuru(ApplicationBase):
     VERSION = MoneyGuruModel.VERSION
     LOGO_NAME = 'logo'
 
-    def __init__(self):
+    def __init__(self, filepath=None):
         ApplicationBase.__init__(self)
         self.prefs = Preferences()
         self.prefs.load()
@@ -39,14 +39,12 @@ class MoneyGuru(ApplicationBase):
         dateFormat = self.prefs.dateFormat
         decimalSep = locale.decimalPoint()
         groupingSep = locale.groupSeparator()
-        cachePath = QDesktopServices.storageLocation(QDesktopServices.CacheLocation)
+        cachePath = QStandardPaths.standardLocations(QStandardPaths.CacheLocation)[0]
         appdata = getAppData()
-        plugin_model_path = op.join(BASE_PATH, 'plugin_examples')
         DateEdit.DATE_FORMAT = dateFormat
         self.model = MoneyGuruModel(
             view=self, date_format=dateFormat, decimal_sep=decimalSep,
             grouping_sep=groupingSep, cache_path=cachePath, appdata_path=appdata,
-            plugin_model_path=plugin_model_path
         )
         # on the Qt side, we're single document based, so it's one doc per app.
         self.doc = Document(app=self)
@@ -54,15 +52,16 @@ class MoneyGuru(ApplicationBase):
         self.mainWindow = MainWindow(doc=self.doc)
         self.preferencesPanel = PreferencesPanel(self.mainWindow, app=self)
         self.aboutBox = AboutBox(self.mainWindow, self)
-        if sys.argv[1:] and op.exists(sys.argv[1]):
-            self.doc.open(sys.argv[1])
+        self.initialFilePath = None
+        if filepath and op.exists(filepath):
+            self.initialFilePath = filepath
         elif self.prefs.recentDocuments:
-            self.doc.open(self.prefs.recentDocuments[0])
+            self.initialFilePath = self.prefs.recentDocuments[0]
 
-        self.connect(self, SIGNAL('applicationFinishedLaunching()'), self.applicationFinishedLaunching)
+        self.finishedLaunching.connect(self.applicationFinishedLaunching)
         QCoreApplication.instance().aboutToQuit.connect(self.applicationWillTerminate)
 
-    #--- Public
+    # --- Public
     def showAboutBox(self):
         self.aboutBox.show()
 
@@ -76,11 +75,13 @@ class MoneyGuru(ApplicationBase):
             self.preferencesPanel.save()
             self.prefs.prefsChanged.emit()
 
-    #--- Event Handling
+    # --- Event Handling
     def applicationFinishedLaunching(self):
         self.prefs.restoreGeometry('mainWindowGeometry', self.mainWindow)
         self.prefs.restoreGeometry('importWindowGeometry', self.mainWindow.importWindow)
         self.mainWindow.show()
+        if self.initialFilePath:
+            self.doc.open(self.initialFilePath, initial=True)
 
     def applicationWillTerminate(self):
         self.doc.close()
@@ -90,10 +91,10 @@ class MoneyGuru(ApplicationBase):
         self.prefs.save()
         self.model.shutdown()
 
-    #--- Signals
+    # --- Signals
     willSavePrefs = pyqtSignal()
 
-    #--- model --> view
+    # --- model --> view
     def get_default(self, key):
         return self.prefs.get_value(key)
 

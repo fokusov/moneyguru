@@ -1,6 +1,4 @@
-# Created By: Virgil Dupras
-# Created On: 2009-02-12
-# Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
+# Copyright 2016 Virgil Dupras
 #
 # This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
 # which should be included with this package. The terms are also available at
@@ -9,7 +7,6 @@
 import sys
 import os
 import os.path as op
-import shutil
 import logging
 import datetime
 import threading
@@ -17,15 +14,15 @@ from collections import namedtuple
 import re
 import importlib
 
-from hscommon.currency import Currency, USD
 from hscommon.notify import Broadcaster
 from hscommon.util import nonone
 
 from .const import DATE_FORMAT_FOR_PREFERENCES
 from .model import currency
 from .model.amount import parse_amount, format_amount
+from .model.currency import Currency, USD
 from .model.date import parse_date, format_date
-from .plugin import Plugin, CurrencyProviderPlugin
+from .plugin import CurrencyProviderPlugin, get_all_core_plugin_modules, get_plugins_from_mod
 
 class PreferenceNames:
     """Holds a list of preference key constants used in moneyGuru.
@@ -41,6 +38,8 @@ class PreferenceNames:
     AutoDecimalPlace = 'AutoDecimalPlace'
     CustomRanges = 'CustomRanges'
     ShowScheduleScopeDialog = 'ShowScheduleScopeDialog'
+    DisabledCorePlugins = 'DisabledCorePlugins'
+    EnabledUserPlugins = 'EnabledUserPlugins'
 
 # http://stackoverflow.com/questions/1606436/adding-docstrings-to-namedtuples-in-python
 class SavedCustomRange(namedtuple('SavedCustomRange', 'name start end')):
@@ -133,17 +132,16 @@ class Application(Broadcaster):
     :param str appdata_path: Path in which we put user-specific files we need for moneyGuru to work
                              well, but that don't qualify as "cache". For now, it's where we put
                              the plugins. If ``None``, plugins are disabled.
-    :param str plugin_model_path: The path where moneyGuru's builtin plugins are located.
     """
 
     APP_NAME = "moneyGuru"
     PROMPT_NAME = APP_NAME
     NAME = APP_NAME
-    VERSION = '2.8.2'
+    VERSION = '2.10.1'
 
     def __init__(
             self, view, date_format='dd/MM/yyyy', decimal_sep='.', grouping_sep='',
-            default_currency=USD, cache_path=None, appdata_path=None, plugin_model_path=None):
+            default_currency=USD, cache_path=None, appdata_path=None):
         Broadcaster.__init__(self)
         self.view = view
         self.cache_path = cache_path
@@ -156,6 +154,8 @@ class Application(Broadcaster):
         else:
             db_path = ':memory:'
         self.appdata_path = appdata_path
+        if appdata_path and not op.exists(appdata_path):
+            os.makedirs(appdata_path)
         currency.initialize_db(db_path)
         self.is_first_run = not self.get_default(PreferenceNames.HadFirstLaunch, False)
         if self.is_first_run:
@@ -170,11 +170,18 @@ class Application(Broadcaster):
         self._show_schedule_scope_dialog = self.get_default(PreferenceNames.ShowScheduleScopeDialog, True)
         self.saved_custom_ranges = [None] * 3
         self._load_custom_ranges()
-        self._load_plugins(plugin_model_path)
+        self.plugins = []
+        # All core plugins are enabled by default, so we keep track of *disabled* plugins instead
+        # of enabled ones.
+        self._disabled_core_plugins = set(self.get_default(PreferenceNames.DisabledCorePlugins, []))
+        # User plugins are disabled by default.
+        self._enabled_user_plugins = set(self.get_default(PreferenceNames.EnabledUserPlugins, []))
+        self._load_core_plugins()
+        self._load_user_plugins()
         self._hook_currency_plugins()
         self._update_autosave_timer()
 
-    #--- Private
+    # --- Private
     def _autosave_all_documents(self):
         self.notify('must_autosave')
         self._update_autosave_timer()
@@ -203,13 +210,21 @@ class Application(Broadcaster):
             else:
                 self.saved_custom_ranges[index] = None
 
-    def _load_plugins(self, plugin_model_path):
-        self.plugins = []
+    def _load_plugin_module(self, plugin_module):
+        for x in get_plugins_from_mod(plugin_module):
+            if all(p.NAME != x.NAME for p in self.plugins):
+                self.plugins.append(x)
+
+    def _load_core_plugins(self):
+        for mod in get_all_core_plugin_modules():
+            self._load_plugin_module(mod)
+
+    def _load_user_plugins(self):
         if not self.appdata_path:
             return
         plpath = op.join(self.appdata_path, 'moneyguru_plugins')
         if not op.exists(plpath):
-            shutil.copytree(plugin_model_path, plpath)
+            os.mkdir(plpath)
         modulenames = [fn[:-3] for fn in os.listdir(plpath) if fn.endswith('.py') and fn != '__init__.py']
         sys.path.insert(0, self.appdata_path)
         for modulename in modulenames:
@@ -217,16 +232,12 @@ class Application(Broadcaster):
                 mod = importlib.import_module('moneyguru_plugins.'+modulename)
             except ImportError:
                 logging.warning("Couldn't import plugin %s", modulename)
-            for x in vars(mod).values():
-                try:
-                    if issubclass(x, Plugin) and x.NAME:
-                        self.plugins.append(x)
-                except TypeError: # not a class, we don't care and ignore
-                    pass
+            else:
+                self._load_plugin_module(mod)
         del sys.path[0]
 
     def _hook_currency_plugins(self):
-        currency_plugins = [p for p in self.plugins if issubclass(p, CurrencyProviderPlugin)]
+        currency_plugins = [p for p in self.get_enabled_plugins() if issubclass(p, CurrencyProviderPlugin)]
         for p in currency_plugins:
             Currency.get_rates_db().register_rate_provider(p().wrapped_get_currency_rates)
 
@@ -242,7 +253,7 @@ class Application(Broadcaster):
                 custom_ranges.append([])
         self.set_default(PreferenceNames.CustomRanges, custom_ranges)
 
-    #--- Public
+    # --- Public
     def format_amount(self, amount, **kw):
         """Returns a formatted amount using app-wide preferences.
 
@@ -314,8 +325,8 @@ class Application(Broadcaster):
 
         :param int slot: The slot number (0-2) to save this range into.
         :param str name: A name for the range.
-        :param date start: Start of the range.
-        :param date end: End of the range.
+        :param datetime.date start: Start of the range.
+        :param datetime.date end: End of the range.
         """
         self.saved_custom_ranges[slot] = SavedCustomRange(name, start, end)
         self._save_custom_ranges()
@@ -334,6 +345,31 @@ class Application(Broadcaster):
         """
         self._autosave_interval = 0
         self._update_autosave_timer()
+
+    def get_enabled_plugins(self):
+        return [p for p in self.plugins if self.is_plugin_enabled(p)]
+
+    def is_plugin_enabled(self, plugin):
+        pid = plugin.plugin_id()
+        if plugin.is_core():
+            return pid not in self._disabled_core_plugins
+        else:
+            return pid in self._enabled_user_plugins
+
+    def set_plugin_enabled(self, plugin, enabled):
+        pid = plugin.plugin_id()
+        if plugin.is_core():
+            if enabled:
+                self._disabled_core_plugins.discard(pid)
+            else:
+                self._disabled_core_plugins.add(pid)
+            self.set_default(PreferenceNames.DisabledCorePlugins, list(self._disabled_core_plugins))
+        else:
+            if enabled:
+                self._enabled_user_plugins.add(pid)
+            else:
+                self._enabled_user_plugins.discard(pid)
+            self.set_default(PreferenceNames.EnabledUserPlugins, list(self._enabled_user_plugins))
 
     def get_default(self, key, fallback_value=None):
         """Returns moneyGuru user pref for ``key``.
@@ -369,7 +405,7 @@ class Application(Broadcaster):
         """Default, app-wide date format."""
         return self._date_format
 
-    #--- Preferences
+    # --- Preferences
     @property
     def autosave_interval(self):
         """*get/set int*. Interval (in minutes) at which we perform autosave."""

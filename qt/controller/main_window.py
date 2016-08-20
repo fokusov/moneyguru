@@ -8,12 +8,13 @@
 
 import os.path as op
 
-from PyQt4 import QtGui
-from PyQt4.QtCore import Qt, QProcess, QUrl, QRect, QSize
-from PyQt4.QtGui import (
-    QMainWindow, QPrintDialog, QMessageBox, QIcon, QPixmap, QDesktopServices, QTabBar, QSizePolicy,
-    QHBoxLayout, QPushButton, QMenu, QAction, QMenuBar, QShortcut, QKeySequence, QFileDialog,
-    QApplication
+from PyQt5.QtCore import Qt, QProcess, QUrl, QRect, QSize
+from PyQt5.QtPrintSupport import QPrintDialog
+from PyQt5.QtGui import QIcon, QPixmap, QDesktopServices, QKeySequence
+from PyQt5.QtWidgets import (
+    QMainWindow, QMessageBox, QTabBar, QSizePolicy, QHBoxLayout, QPushButton, QMenu, QAction,
+    QMenuBar, QShortcut, QFileDialog, QApplication, QToolButton, QWidget, QVBoxLayout, QSpacerItem,
+    QStackedWidget, QLabel
 )
 
 from qtlib.recent import Recent
@@ -23,6 +24,7 @@ from hscommon.trans import trget
 from hscommon.plat import ISLINUX
 from core.const import PaneType, PaneArea
 from core.gui.main_window import MainWindow as MainWindowModel
+from core.gui.custom_date_range_panel import CustomDateRangePanel as CustomDateRangePanelModel
 from core.exception import FileFormatError
 
 from ..support.date_range_selector_view import DateRangeSelectorView
@@ -35,15 +37,10 @@ from .transaction.view import TransactionView
 from .schedule.view import ScheduleView
 from .general_ledger.view import GeneralLedgerView
 from .docprops_view import DocPropsView
+from .pluginlist_view import PluginListView
 from .new_view import NewView
 from .readonly_table_plugin_view import ReadOnlyTablePluginView
 from .lookup import Lookup
-from .account_panel import AccountPanel
-from .account_reassign_panel import AccountReassignPanel
-from .transaction_panel import TransactionPanel
-from .mass_edition_panel import MassEditionPanel
-from .schedule_panel import SchedulePanel
-from .budget_panel import BudgetPanel
 from .export_panel import ExportPanel
 from .custom_date_range_panel import CustomDateRangePanel
 from .search_field import SearchField
@@ -62,6 +59,7 @@ PANETYPE2ICON = {
     PaneType.Budget: 'budget_16',
     PaneType.GeneralLedger: 'gledger_16',
     PaneType.DocProps: 'gledger_16',
+    PaneType.PluginList: '',
 }
 
 PANETYPE2VIEWCLASS = {
@@ -73,6 +71,7 @@ PANETYPE2VIEWCLASS = {
     PaneType.Budget: BudgetView,
     PaneType.GeneralLedger: GeneralLedgerView,
     PaneType.DocProps: DocPropsView,
+    PaneType.PluginList: PluginListView,
     PaneType.Empty: NewView,
     PaneType.ReadOnlyTablePlugin: ReadOnlyTablePluginView,
 }
@@ -91,14 +90,6 @@ class MainWindow(QMainWindow):
         # Create base elements
         self.model = MainWindowModel(document=doc.model)
         self.model2view = {}
-        self.apanel = AccountPanel(mainwindow=self)
-        self.tpanel = TransactionPanel(mainwindow=self)
-        self.mepanel = MassEditionPanel(mainwindow=self)
-        self.scpanel = SchedulePanel(mainwindow=self)
-        self.bpanel = BudgetPanel(mainwindow=self)
-        self.cdrpanel = CustomDateRangePanel(mainwindow=self)
-        self.arpanel = AccountReassignPanel(mainwindow=self)
-        self.expanel = ExportPanel(mainwindow=self)
         self.alookup = Lookup(self, model=self.model.account_lookup)
         self.clookup = Lookup(self, model=self.model.completion_lookup)
         self.drsel = DateRangeSelector(mainwindow=self, view=self.dateRangeSelectorView)
@@ -117,19 +108,19 @@ class MainWindow(QMainWindow):
     def _setupUi(self): # has to take place *before* base elements creation
         self.setWindowTitle("moneyGuru")
         self.resize(700, 580)
-        self.centralwidget = QtGui.QWidget(self)
-        self.verticalLayout = QtGui.QVBoxLayout(self.centralwidget)
+        self.centralwidget = QWidget(self)
+        self.verticalLayout = QVBoxLayout(self.centralwidget)
         self.verticalLayout.setSpacing(0)
-        self.verticalLayout.setMargin(0)
-        self.topBar = QtGui.QWidget(self.centralwidget)
+        self.verticalLayout.setContentsMargins(0, 0, 0, 0)
+        self.topBar = QWidget(self.centralwidget)
         self.horizontalLayout_2 = QHBoxLayout(self.topBar)
         self.horizontalLayout_2.setContentsMargins(2, 0, 2, 0)
-        spacerItem = QtGui.QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        spacerItem = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.horizontalLayout_2.addItem(spacerItem)
         self.dateRangeSelectorView = DateRangeSelectorView(self.topBar)
         self.dateRangeSelectorView.setMinimumSize(QSize(220, 0))
         self.horizontalLayout_2.addWidget(self.dateRangeSelectorView)
-        spacerItem1 = QtGui.QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
+        spacerItem1 = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.horizontalLayout_2.addItem(spacerItem1)
         self.searchLineEdit = SearchEdit(self.topBar)
         self.searchLineEdit.setMaximumSize(QSize(240, 16777215))
@@ -138,14 +129,14 @@ class MainWindow(QMainWindow):
         self.tabBar = QTabBar(self.centralwidget)
         self.tabBar.setMinimumSize(QSize(0, 20))
         self.verticalLayout.addWidget(self.tabBar)
-        self.mainView = QtGui.QStackedWidget(self.centralwidget)
+        self.mainView = QStackedWidget(self.centralwidget)
         self.verticalLayout.addWidget(self.mainView)
 
         # Bottom buttons & status label
-        self.bottomBar = QtGui.QWidget(self.centralwidget)
+        self.bottomBar = QWidget(self.centralwidget)
         self.horizontalLayout = QHBoxLayout(self.bottomBar)
-        self.horizontalLayout.setMargin(2)
-        self.horizontalLayout.setMargin(0)
+        self.horizontalLayout.setContentsMargins(2, 2, 2, 2)
+        self.horizontalLayout.setContentsMargins(0, 0, 0, 0)
         self.newItemButton = QPushButton(self.bottomBar)
         buttonSizePolicy = QSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         buttonSizePolicy.setHorizontalStretch(0)
@@ -176,7 +167,7 @@ class MainWindow(QMainWindow):
         self.columnsVisibilityButton.setIcon(QIcon(QPixmap(':/columns_16')))
         self.horizontalLayout.addWidget(self.columnsVisibilityButton)
 
-        self.statusLabel = QtGui.QLabel(tr("Status"))
+        self.statusLabel = QLabel(tr("Status"))
         self.statusLabel.setAlignment(Qt.AlignCenter)
         self.horizontalLayout.addWidget(self.statusLabel)
         self.verticalLayout.addWidget(self.bottomBar)
@@ -329,6 +320,7 @@ class MainWindow(QMainWindow):
         setAccelKeys(self.menubar)
         self.tabBar.setMovable(True)
         self.tabBar.setTabsClosable(True)
+        self.tabBar.setExpanding(False)
 
         seq = QKeySequence(Qt.CTRL + Qt.SHIFT + Qt.Key_Right)
         self._shortcutNextTab = QShortcut(seq, self)
@@ -408,14 +400,14 @@ class MainWindow(QMainWindow):
         self._shortcutNextTab.activated.connect(self.showNextViewTriggered)
         self._shortcutPrevTab.activated.connect(self.showPreviousViewTriggered)
 
-    #--- QWidget overrides
+    # --- QWidget overrides
     def closeEvent(self, event):
         if self.doc.confirmDestructiveAction():
             event.accept()
         else:
             event.ignore()
 
-    #--- Private
+    # --- Private
     def _print(self):
         dialog = QPrintDialog(self)
         if dialog.exec_() != QPrintDialog.Accepted:
@@ -430,7 +422,7 @@ class MainWindow(QMainWindow):
         if pane_view in self.model2view:
             view = self.model2view[pane_view]
         else:
-            view = PANETYPE2VIEWCLASS[pane_type](model=pane_view)
+            view = PANETYPE2VIEWCLASS[pane_type](model=pane_view, mainwindow=self)
             self.model2view[pane_view] = view
             self.mainView.addWidget(view)
             view.restoreSubviewsSize()
@@ -471,7 +463,7 @@ class MainWindow(QMainWindow):
             PaneType.Schedule: tr("New Schedule"),
             PaneType.Budget: tr("New Budget"),
             PaneType.GeneralLedger: tr("New Transaction"),
-        }.get(viewType, tr("New Item")) #XXX make "New Item" disabled
+        }.get(viewType, tr("New Item")) # XXX make "New Item" disabled
         self.actionNewItem.setText(newItemLabel)
         self.actionNewAccountGroup.setEnabled(isSheet)
         self.actionMoveDown.setEnabled(isTransactionOrEntryTable)
@@ -500,7 +492,7 @@ class MainWindow(QMainWindow):
             self.actionRedo.setEnabled(False)
             self.actionRedo.setText(tr("Redo"))
 
-    #--- Actions
+    # --- Actions
     # Views
     def showNetWorthTriggered(self):
         self.model.select_pane_of_type(PaneType.NetWorth)
@@ -608,7 +600,7 @@ class MainWindow(QMainWindow):
     def importDocument(self):
         title = tr("Select a document to import")
         filters = tr("Supported files (*.moneyguru *.ofx *.qfx *.qif *.csv *.txt)")
-        docpath = str(QFileDialog.getOpenFileName(self.app.mainWindow, title, '', filters))
+        docpath, filetype = QFileDialog.getOpenFileName(self.app.mainWindow, title, '', filters)
         # There's a strange glitch under GNOME where, right after the dialog is gone, the main
         # window isn't the active window, but it will become active if we give it enough time. If we
         # start showing the import window before that happens, we'll end up with an import window
@@ -624,7 +616,7 @@ class MainWindow(QMainWindow):
             except FileFormatError as e:
                 QMessageBox.warning(self.app.mainWindow, tr("Cannot import file"), str(e))
 
-    #--- Other Signals
+    # --- Other Signals
     def currentTabChanged(self, index):
         self.model.current_pane_index = index
         self._setTabIndex(index)
@@ -642,11 +634,20 @@ class MainWindow(QMainWindow):
     def tabMoved(self, fromIndex, toIndex):
         self.model.move_pane(fromIndex, toIndex)
 
-    #--- model --> view
+    # --- model --> view
     def change_current_pane(self):
         self._setTabIndex(self.model.current_pane_index)
 
+    def get_panel_view(self, model):
+        if isinstance(model, CustomDateRangePanelModel):
+            return CustomDateRangePanel(model, self)
+        else:
+            return ExportPanel(model, self)
+
     def refresh_panes(self):
+        # Always remove the "new tab" tab
+        if self.tabBar.count() > 0:
+            self.tabBar.removeTab(self.tabBar.count()-1)
         while self.tabBar.count() < self.model.pane_count:
             self.tabBar.addTab('')
         for i in range(self.model.pane_count):
@@ -678,6 +679,13 @@ class MainWindow(QMainWindow):
         while self.tabBar.count() > self.model.pane_count:
             self.tabBar.removeTab(self.tabBar.count()-1)
         self.tabBar.setTabsClosable(self.model.pane_count > 1)
+        # Add the "new tab" tab
+        last_tab_index = self.tabBar.addTab('')
+        self.tabBar.setTabEnabled(last_tab_index, False)
+        newTabButton = QToolButton()
+        newTabButton.setText("+")
+        newTabButton.clicked.connect(self.model.new_tab)
+        self.tabBar.setTabButton(last_tab_index, QTabBar.RightSide, newTabButton)
 
     def refresh_status_line(self):
         self.statusLabel.setText(self.model.status_line)

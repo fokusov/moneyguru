@@ -6,8 +6,8 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import Qt
-from PyQt4.QtGui import (
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import (
     QVBoxLayout, QLabel, QButtonGroup, QRadioButton, QTableView, QAbstractItemView,
     QDialogButtonBox, QApplication, QDialog, QFileDialog, QCheckBox
 )
@@ -26,13 +26,14 @@ class ExportType:
 
 class ExportPanel(Panel):
     FIELDS = []
+    PERSISTENT_NAME = 'exportPanel'
 
-    def __init__(self, mainwindow):
+    def __init__(self, model, mainwindow):
         Panel.__init__(self, mainwindow)
+        self.setAttribute(Qt.WA_DeleteOnClose)
         self.mainwindow = mainwindow
         self._setupUi()
-        self.model = mainwindow.model.export_panel
-        self.model.view = self
+        self.model = model
         self.accountTable = ExportAccountTable(model=self.model.account_table, view=self.tableView)
 
         self.exportTypeButtons.buttonClicked[int].connect(self.exportTypeSelected)
@@ -84,7 +85,7 @@ class ExportPanel(Panel):
         self.exportButton = self.buttonBox.addButton(tr("Export"), QDialogButtonBox.ActionRole)
         self.mainLayout.addWidget(self.buttonBox)
 
-    #--- Overrides
+    # --- Overrides
     def _loadFields(self):
         self.exportAllButton.setChecked(self.model.export_all)
         self.exportAsQIFButton.setChecked(self.model.export_format == ExportFormat.QIF)
@@ -93,13 +94,13 @@ class ExportPanel(Panel):
     def _saveFields(self):
         self.model.current_daterange_only = self.dateRangeOnlyCheckbox.isChecked()
 
-    #--- Event Handlers
+    # --- Event Handlers
     def exportButtonClicked(self):
         title = tr("Export")
         fileext = 'qif' if self.model.export_format == ExportFormat.QIF else 'csv'
         filters = tr("{0} Files (*.{1})").format(fileext.upper(), fileext)
         filename = 'export.{0}'.format(fileext)
-        docpath = str(QFileDialog.getSaveFileName(self.mainwindow, title, filename, filters))
+        docpath = QFileDialog.getSaveFileName(self.mainwindow, title, filename, filters)[0]
         if docpath:
             self.model.export_path = docpath
             self.accept()
@@ -110,7 +111,7 @@ class ExportPanel(Panel):
     def exportFormatSelected(self, typeId):
         self.model.export_format = typeId
 
-    #--- model --> view
+    # --- model --> view
     def set_table_enabled(self, enabled):
         self.tableView.setEnabled(enabled)
 

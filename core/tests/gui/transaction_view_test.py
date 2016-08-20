@@ -1,19 +1,19 @@
 # Created By: Virgil Dupras
 # Created On: 2010-01-09
 # Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 from datetime import date
 
 from hscommon.testutil import eq_
-from hscommon.currency import USD
 
+from ...model.currency import USD
 from ..base import TestApp, with_app
 
-#--- three transactions
+# --- three transactions
 def app_three_transactions():
     app = TestApp()
     app.add_txn(amount='1')
@@ -34,7 +34,7 @@ def test_totals_select_two(app):
     expected = "2 out of 3 selected. Amount: 5.00"
     eq_(app.mw.status_line, expected)
 
-#--- Multiple currencies
+# --- Multiple currencies
 def app_multiple_currencies():
     app = TestApp()
     USD.set_CAD_value(2, date(2010, 3, 9))

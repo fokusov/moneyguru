@@ -9,10 +9,11 @@
 from hscommon.trans import trget
 from hscommon.gui.column import Column
 from .table import GUITable, Row
+from .transaction_table_base import TransactionSelectionMixin
 
 trcol = trget('columns')
 
-class ImportTable(GUITable):
+class ImportTable(GUITable, TransactionSelectionMixin):
     SAVENAME = 'ImportTable'
     COLUMNS = [
         Column('will_import', display=''),
@@ -32,8 +33,29 @@ class ImportTable(GUITable):
         GUITable.__init__(self, document=import_window.document)
         self.window = import_window
         self._is_two_sided = False
+        self.__last_explicitly_selected = []
     
-    #--- Override
+    # --- Override
+    def select_transactions(self, transactions):
+        selected_indexes = []
+        for index, row in enumerate(self):
+            indexed_row = row.imported.transaction if row.imported else row.entry.transaction
+            if indexed_row in transactions:
+                selected_indexes.append(index)
+        self.selected_indexes = selected_indexes
+
+    @property
+    def selected_transactions(self):
+        return [row.imported.transaction if row.imported
+                else row.entry.transaction for row in self.selected_rows]
+
+    @property
+    def _explicitly_selected_transactions(self):
+        return self.__last_explicitly_selected
+
+    def _update_selection(self):
+        self.__last_explicitly_selected = self.selected_transactions
+
     def _fill(self):
         self._is_two_sided = False
         self.pane = self.window.selected_pane
@@ -44,7 +66,7 @@ class ImportTable(GUITable):
                 self._is_two_sided = True
             self.append(ImportTableRow(self, existing, imported))
     
-    #--- Public
+    # --- Public
     def bind(self, source_index, dest_index):
         source = self[source_index]
         dest = self[dest_index]
@@ -74,7 +96,7 @@ class ImportTable(GUITable):
         row.unbind()
         self.refresh()
     
-    #--- Properties
+    # --- Properties
     @property
     def is_two_sided(self):
         """Returns whether the table should show columns to display matches from the target account.
@@ -119,7 +141,7 @@ class ImportTableRow(Row):
     def unbind(self):
         self.table.pane.unbind(self.entry, self.imported)
     
-    #--- Properties
+    # --- Properties
     @property
     def date(self):
         return self.table.document.app.format_date(self._date) if self._date else ''
@@ -166,10 +188,14 @@ class ImportTableRow(Row):
     
     @property
     def will_import(self):
-        return getattr(self.imported, 'will_import', True) if self.imported is not None else False
+        pane = self.table.window.selected_pane
+        if not self.imported:
+            return False
+        pane = self.table.window.selected_pane
+        return pane.to_import.get(self.imported, True)
     
     @will_import.setter
     def will_import(self, value):
+        pane = self.table.window.selected_pane
         if self.imported is not None:
-            self.imported.will_import = value
-    
+            pane.to_import[self.imported] = value

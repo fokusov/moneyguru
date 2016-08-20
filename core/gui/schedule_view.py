@@ -6,10 +6,13 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
+import weakref
+
 from hscommon.trans import tr
 from ..const import PaneType
 from .base import BaseView, MESSAGES_EVERYTHING_CHANGED
 from .schedule_table import ScheduleTable
+from .schedule_panel import SchedulePanel
 
 class ScheduleView(BaseView):
     VIEW_TYPE = PaneType.Schedule
@@ -28,16 +31,22 @@ class ScheduleView(BaseView):
     def _revalidate(self):
         self.table.refresh_and_show_selection()
 
-    #--- Override
+    # --- Override
     def save_preferences(self):
         self.table.columns.save_columns()
 
-    #--- Public
+    # --- Public
     def new_item(self):
-        self.mainwindow.schedule_panel.new()
+        schedule_panel = SchedulePanel(self.mainwindow)
+        schedule_panel.view = weakref.proxy(self.view.get_panel_view(schedule_panel))
+        schedule_panel.new()
+        return schedule_panel
 
     def edit_item(self):
-        self.mainwindow.schedule_panel.load()
+        schedule_panel = SchedulePanel(self.mainwindow)
+        schedule_panel.view = weakref.proxy(self.view.get_panel_view(schedule_panel))
+        schedule_panel.load()
+        return schedule_panel
 
     def delete_item(self):
         self.table.delete()

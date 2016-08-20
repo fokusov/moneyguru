@@ -1,6 +1,4 @@
-# Created By: Virgil Dupras
-# Created On: 2009-12-30
-# Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
+# Copyright 2016 Virgil Dupras
 #
 # This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
 # which should be included with this package. The terms are also available at
@@ -10,7 +8,6 @@ import sys
 import os
 import os.path as op
 import shutil
-import json
 import glob
 import compileall
 from argparse import ArgumentParser
@@ -30,6 +27,14 @@ from hscommon.util import ensure_folder, modified_after, delete_files_with_patte
 
 def parse_args():
     parser = ArgumentParser()
+    parser.add_argument(
+        '--ui',
+        help="Type of UI to build. 'qt' or 'cocoa'. Default is determined by your system."
+    )
+    parser.add_argument(
+        '--dev', action='store_true', default=False,
+        help="If this flag is set, will configure for dev builds."
+    )
     parser.add_argument(
         '--clean', action='store_true', dest='clean',
         help="Clean build folder before building"
@@ -70,11 +75,22 @@ def parse_args():
         '--xibless', action='store_true', dest='xibless',
         help="Build only xibless UIs"
     )
+    parser.add_argument(
+        '--normpo', action='store_true', dest='normpo',
+        help="Normalize all PO files (do this before commit)."
+    )
     args = parser.parse_args()
     return args
 
 def clean():
-    TOCLEAN = ['build', 'dist', 'install', op.join('help', 'en', 'image')]
+    TOCLEAN = [
+        'build',
+        op.join('cocoa', 'build'),
+        op.join('cocoa', 'autogen'),
+        'dist',
+        'install',
+        op.join('help', 'en', 'image')
+    ]
     for path in TOCLEAN:
         try:
             os.remove(path)
@@ -148,7 +164,7 @@ def build_cocoa(dev):
         hardlink('cocoa/mg_cocoa.py', 'build/mg_cocoa.py')
     else:
         copy('cocoa/mg_cocoa.py', 'build/mg_cocoa.py')
-    tocopy = ['core', 'hscommon', 'cocoalib/cocoa', 'objp', 'sgmllib']
+    tocopy = ['core', 'hscommon', 'cocoalib/cocoa', 'objp']
     copy_packages(tocopy, pydep_folder, create_links=dev)
     sys.path.insert(0, 'build')
     collect_stdlib_dependencies('build/mg_cocoa.py', pydep_folder)
@@ -160,10 +176,6 @@ def build_cocoa(dev):
         compileall.compile_dir(pydep_folder, force=True, legacy=True)
         delete_files_with_pattern(pydep_folder, '*.py')
         delete_files_with_pattern(pydep_folder, '__pycache__')
-    print("Compiling PSMTabBarControl framework")
-    os.chdir('psmtabbarcontrol')
-    print_and_do('{0} waf configure && {0} waf && {0} waf build_framework'.format(sys.executable))
-    os.chdir('..')
     print("Compiling with WAF")
     os.chdir('cocoa')
     print_and_do(cocoa_compile_command())
@@ -173,12 +185,10 @@ def build_cocoa(dev):
     print("Copying resources and frameworks")
     resources = [
         'cocoa/dsa_pub.pem', 'build/mg_cocoa.py', 'build/help', 'data/example.moneyguru',
-        'plugin_examples'
     ] + glob.glob('images/*')
     app.copy_resources(*resources, use_symlinks=dev)
     app.copy_frameworks(
         'build/Python', 'cocoalib/Sparkle.framework',
-        'psmtabbarcontrol/PSMTabBarControl.framework'
     )
     print("Creating the run.py file")
     tmpl = open('run_template_cocoa.py', 'rt').read()
@@ -188,7 +198,9 @@ def build_cocoa(dev):
 def build_qt(dev):
     qrc_path = op.join('qt', 'mg.qrc')
     pyrc_path = op.join('qt', 'mg_rc.py')
-    print_and_do("pyrcc4 -py3 {0} > {1}".format(qrc_path, pyrc_path))
+    ret = print_and_do("pyrcc5 {} > {}".format(qrc_path, pyrc_path))
+    if ret != 0:
+        raise RuntimeError("pyrcc5 call failed with code {}. Aborting build".format(ret))
     build_help()
     print("Creating the run.py file")
     shutil.copy('run_template_qt.py', 'run.py')
@@ -237,7 +249,7 @@ def build_localizations(ui):
     shutil.copytree('locale', locale_dest, ignore=shutil.ignore_patterns('*.po', '*.pot'))
     if ui == 'qt' and not ISLINUX:
         print("Copying qt_*.qm files into the 'locale' folder")
-        from PyQt4.QtCore import QLibraryInfo
+        from PyQt5.QtCore import QLibraryInfo
         trfolder = QLibraryInfo.location(QLibraryInfo.TranslationsPath)
         for lang in loc.get_langs('locale'):
             qmname = 'qt_%s.qm' % lang
@@ -277,6 +289,11 @@ def build_mergepot():
     print("Updating .po files using .pot files")
     loc.merge_pots_into_pos('locale')
     loc.merge_pots_into_pos(op.join('qtlib', 'locale'))
+
+def build_normpo():
+    loc.normalize_all_pos('locale')
+    loc.normalize_all_pos(op.join('qtlib', 'locale'))
+    loc.normalize_all_pos(op.join('cocoalib', 'locale'))
 
 def build_ext():
     print("Building C extensions")
@@ -346,8 +363,8 @@ def build_cocoa_bridging_interfaces():
         PanelWithTransactionView, PyTransactionPanel, PySchedulePanel, SchedulePanelView,
         BaseViewView, PyAccountSheetView, PyTransactionView,
         PyAccountView, AccountViewView, PyScheduleView, PyBudgetView,
-        PyGeneralLedgerView, PyDocPropsView, PyEmptyView, PyReadOnlyPluginView, PyMainWindow,
-        MainWindowView, PyDocument, DocumentView, PyMoneyGuruApp
+        PyGeneralLedgerView, PyDocPropsView, PyPluginListView, PyEmptyView, PyReadOnlyPluginView,
+        PyMainWindow, MainWindowView, PyDocument, DocumentView, PyMoneyGuruApp
     )
     from mg_cocoa import PyPrintView, PySplitPrint, PyTransactionPrint, PyEntryPrint
     allclasses = [
@@ -359,7 +376,7 @@ def build_cocoa_bridging_interfaces():
         PyMassEditionPanel, PyBudgetPanel, PyCustomDateRangePanel, PyAccountReassignPanel,
         PyExportPanel, PyPanelWithTransaction, PyTransactionPanel, PySchedulePanel,
         PyAccountSheetView, PyTransactionView, PyAccountView, PyScheduleView, PyBudgetView,
-        PyGeneralLedgerView, PyDocPropsView, PyEmptyView, PyReadOnlyPluginView,
+        PyGeneralLedgerView, PyDocPropsView, PyPluginListView, PyEmptyView, PyReadOnlyPluginView,
         PyMainWindow, PyDocument, PyMoneyGuruApp
     ]
     proxy.destroyPool()
@@ -392,11 +409,11 @@ def build_normal(ui, dev, do_build_ext=True):
 
 def main():
     args = parse_args()
-    conf = json.load(open('conf.json'))
-    ui = conf['ui']
-    dev = conf['dev']
+    ui = args.ui
+    if ui not in ('cocoa', 'qt'):
+        ui = 'cocoa' if ISOSX else 'qt'
     print("Building moneyGuru with UI {}".format(ui))
-    if dev:
+    if args.dev:
         print("Building in Dev mode")
     if args.clean:
         clean()
@@ -410,6 +427,8 @@ def main():
         build_updatepot()
     elif args.mergepot:
         build_mergepot()
+    elif args.normpo:
+        build_normpo()
     elif args.cocoamod:
         build_cocoa_proxy_module()
         build_cocoa_bridging_interfaces()
@@ -424,7 +443,8 @@ def main():
         build_cocoalib_xibless()
         build_xibless()
     else:
-        build_normal(ui, dev, not args.no_ext)
+        build_normal(ui, args.dev, not args.no_ext)
 
 if __name__ == '__main__':
     main()
+

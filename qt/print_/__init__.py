@@ -6,8 +6,8 @@
 # which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
-from PyQt4.QtCore import QRect
-from PyQt4.QtGui import QPainter
+from PyQt5.QtCore import QRect
+from PyQt5.QtGui import QPainter
 
 from .layout import LayoutPage, LayoutViewElement
 from .item_view import (
@@ -19,7 +19,7 @@ from .item_view import (
 
 # The PDF preview is all blurry, I don't know how it looks on a real printer. This guy seems to have
 # the same problem:
-#http://lists.trolltech.com/pipermail/qt-interest/2009-November/015375.html
+# http://lists.trolltech.com/pipermail/qt-interest/2009-November/015375.html
 
 class ViewPrinter:
     def __init__(self, printer, baseView):

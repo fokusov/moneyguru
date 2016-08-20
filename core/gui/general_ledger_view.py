@@ -11,8 +11,9 @@ from ..const import PaneType
 from .base import BaseView, MESSAGES_DOCUMENT_CHANGED
 from .general_ledger_table import GeneralLedgerTable
 from .transaction_print import EntryPrint
+from .transaction_view import ViewWithTransactionsMixin
 
-class GeneralLedgerView(BaseView):
+class GeneralLedgerView(BaseView, ViewWithTransactionsMixin):
     VIEW_TYPE = PaneType.GeneralLedger
     PRINT_TITLE_FORMAT = tr('General Ledger from {start_date} to {end_date}')
     PRINT_VIEW_CLASS = EntryPrint
@@ -29,24 +30,24 @@ class GeneralLedgerView(BaseView):
         self.set_children([self.gltable])
         self.bind_messages(self.INVALIDATING_MESSAGES, self._refresh_totals)
 
-    #--- Overrides
+    # --- Overrides
     def _revalidate(self):
         self._refresh_totals()
 
     def save_preferences(self):
         self.gltable.columns.save_columns()
 
-    #--- Public
+    # --- Public
     def delete_item(self):
         self.gltable.delete()
 
     def edit_item(self):
-        self.mainwindow.edit_selected_transactions()
+        return self.edit_selected_transactions()
 
     def new_item(self):
         self.gltable.add()
 
-    #--- Private
+    # --- Private
     def _refresh_totals(self):
         selected, total, total_debit, total_credit = self.gltable.get_totals()
         total_debit_fmt = self.document.format_amount(total_debit)

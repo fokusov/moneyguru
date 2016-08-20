@@ -10,22 +10,21 @@ from datetime import date
 
 from pytest import raises
 from hscommon.testutil import eq_
-from hscommon.currency import Currency, CAD
 
 from .base import ApplicationGUI, TestApp, with_app, testdata
 from ..app import Application
 from ..exception import FileFormatError
 from ..loader.csv import CsvField
+from ..model.currency import Currency, CAD
 from ..model.date import MonthRange, YearRange
 
-PLN = Currency(code='PLN')
 
 def importall(app, filename):
     app.mw.parse_file_for_import(filename)
     while app.iwin.panes:
         app.iwin.import_selected_pane()
 
-#--- Pristine
+# --- Pristine
 @with_app(TestApp)
 def test_qif_export_import(app):
     # Make sure nothing is wrong when the file is empty
@@ -50,6 +49,15 @@ def test_import_invalid_qif(app):
     # Raise a FileFormatError if the file does not have the right format (for now, a valid
     # file is a file that starts with a '!Account' line)
     filename = testdata.filepath('qif', 'invalid.qif')
+    with raises(FileFormatError):
+        app.mw.parse_file_for_import(filename)
+
+@with_app(TestApp)
+def test_import_no_balance_account(app):
+    # When importing a moneyguru file with transactions and accounts, but no balance account, we
+    # would mistakenly go through and present an empty import dialog. We have to raise an error
+    # when that happens. ref #416.
+    filename = testdata.filepath('moneyguru', 'no_balance_account.moneyguru')
     with raises(FileFormatError):
         app.mw.parse_file_for_import(filename)
 
@@ -102,9 +110,10 @@ def test_import_updates_undo_description(app):
     importall(app, testdata.filepath('qif', 'checkbook.qif'))
     app.mw.view.check_gui_calls_partial(['refresh_undo_actions'])
 
-#---
+# ---
 def app_qif_import():
     # One account named 'Account 1' and then an parse_file_for_import() call for the 'checkbook.qif' test file.
+    PLN = Currency(code='PLN')
     app = TestApp(app=Application(ApplicationGUI(), default_currency=PLN))
     app.doc.date_range = YearRange(date(2007, 1, 1))
     app.add_account('Account 1')
@@ -129,8 +138,9 @@ def test_default_account_currency_after_qif_import(app):
     # This QIF has no currency. Therefore, the default currency should be used for accounts
     app.show_nwview()
     app.bsheet.selected = app.bsheet.assets[2]
-    app.mainwindow.edit_item()
-    eq_(app.apanel.currency, PLN)
+    apanel = app.mainwindow.edit_item()
+    PLN = Currency(code='PLN')
+    eq_(apanel.currency, PLN)
 
 @with_app(app_qif_import)
 def test_default_entry_currency_after_qif_import(app):
@@ -138,9 +148,9 @@ def test_default_entry_currency_after_qif_import(app):
     # after the import should cause the entries to be cooked as amount with currency
     app.show_nwview()
     app.bsheet.selected = app.bsheet.assets[2]
-    app.mainwindow.edit_item()
-    app.apanel.currency = CAD
-    app.apanel.save()
+    apanel = app.mainwindow.edit_item()
+    apanel.currency = CAD
+    apanel.save()
     app.show_account()
     eq_(app.etable[0].increase, '42.32')
 
@@ -150,7 +160,7 @@ def test_imported_txns_have_mtime(app):
     tview = app.show_tview()
     assert tview.ttable[0].mtime != ''
 
-#---
+# ---
 class TestOFXImport:
     # A pristine app importing an OFX file
     def do_setup(self):
@@ -294,7 +304,7 @@ class TestTripleOFXImportAcrossSessions:
         eq_(app.etable_count(), 3)
 
 
-#--- Double OFX import with split in the middle
+# --- Double OFX import with split in the middle
 # Import an OFX, change one entry into a split, and then re-import.
 def app_double_ofx_import_with_split_in_the_middle():
     app = TestApp()
@@ -307,11 +317,12 @@ def app_double_ofx_import_with_split_in_the_middle():
     row = app.etable.selected_row
     row.transfer = 'account1'
     app.etable.save_edits()
-    app.tpanel.load()
-    app.stable.add()
-    app.stable[2].credit = '1'
-    app.stable.save_edits()
-    app.tpanel.save()
+    tpanel = app.mw.edit_item()
+    stable = tpanel.split_table
+    stable.add()
+    stable[2].credit = '1'
+    stable.save_edits()
+    tpanel.save()
     importall(app, testdata.filepath('ofx', 'desjardins.ofx'))
     return app
 
@@ -319,8 +330,10 @@ def test_split_wasnt_touched():
     # When matching transaction and encountering a case where the old transaction was changed
     # into a split, bail out and don't touch the amounts.
     app = app_double_ofx_import_with_split_in_the_middle()
-    eq_(len(app.stable), 4)
-    eq_(app.stable[2].credit, '1.00')
+    tpanel = app.get_current_panel()
+    stable = tpanel.split_table
+    eq_(len(stable), 4)
+    eq_(stable[2].credit, '1.00')
 
 class TestImportAccountInGroup:
     def do_setup(self):
@@ -361,7 +374,7 @@ class TestTwoEntriesInRangeSaveThenLoad:
         app.etable.save_edits()
         eq_(app.etable[0].description, 'first')
 
-#---
+# ---
 def app_transfer_between_two_referenced_accounts():
     app = TestApp()
     app.doc.date_range = MonthRange(date(2008, 2, 1))
@@ -408,7 +421,7 @@ def test_bound_amount_correctly_imported(app):
     app.show_account('Account 4')
     eq_(app.etable[0].debit, 'CAD 42.00')
 
-#---
+# ---
 class TestImportFileWithMultipleTransferReferences:
     def do_setup(self):
         app = TestApp()

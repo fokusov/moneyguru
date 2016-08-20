@@ -1,9 +1,9 @@
 # Created By: Virgil Dupras
 # Created On: 2008-06-22
 # Copyright 2015 Hardcoded Software (http://www.hardcoded.net)
-# 
-# This software is licensed under the "GPLv3" License as described in the "LICENSE" file, 
-# which should be included with this package. The terms are also available at 
+#
+# This software is licensed under the "GPLv3" License as described in the "LICENSE" file,
+# which should be included with this package. The terms are also available at
 # http://www.gnu.org/licenses/gpl-3.0.html
 
 from datetime import date
@@ -11,32 +11,30 @@ import threading
 import os.path as op
 
 from hscommon.testutil import eq_, log_calls
-from hscommon.currency import Currency, USD, EUR, CAD
 
 from ..app import Application
 from ..model import currency
 from ..model.account import AccountType
+from ..model.currency import Currency, USD, EUR, CAD
 from ..model.date import MonthRange
 from .base import ApplicationGUI, TestApp, with_app, compare_apps
 from .model.currency_test import set_ratedb_for_tests
 
-PLN = Currency(code='PLN')
-XPF = Currency(code='XPF')
 
 def pytest_funcarg__fake_server(request):
     set_ratedb_for_tests()
 
-#--- Pristine
+# --- Pristine
 def test_cache_path_is_auto_created(fake_server, tmpdir):
     # the cache_path directory is automatically created.
     cache_path = str(tmpdir.join('foo/bar'))
-    app = Application(ApplicationGUI(), cache_path=cache_path)
+    Application(ApplicationGUI(), cache_path=cache_path)
     assert op.exists(cache_path)
 
 def test_cache_path_is_none(fake_server, monkeypatch):
     # currency.initialize_db() is called with :memory: when cache_path is None.
     monkeypatch.setattr(currency, 'initialize_db', log_calls(currency.initialize_db))
-    app = Application(ApplicationGUI()) # default cache_path is None
+    Application(ApplicationGUI()) # default cache_path is None
     expected = [
         {'path': ':memory:'}
     ]
@@ -46,7 +44,7 @@ def test_cache_path_is_not_none(fake_server, monkeypatch, tmpdir):
     # currency.initialize_db() is called with cache_path/currency.db when cache_path is not None.
     cache_path = str(tmpdir)
     monkeypatch.setattr(currency, 'initialize_db', log_calls(currency.initialize_db))
-    app = Application(ApplicationGUI(), cache_path=cache_path)
+    Application(ApplicationGUI(), cache_path=cache_path)
     expected = [
         {'path': op.join(cache_path, 'currency.db')}
     ]
@@ -54,6 +52,7 @@ def test_cache_path_is_not_none(fake_server, monkeypatch, tmpdir):
 
 def test_default_currency(fake_server):
     # It's possible to specify a default currency at startup.
+    PLN = Currency(code='PLN')
     app = TestApp(app=Application(ApplicationGUI(), default_currency=PLN))
     app.show_tview()
     eq_(app.doc.default_currency, PLN)
@@ -72,7 +71,7 @@ def test_set_account_list_currency_on_load(app, fake_server):
     # Because our amount entered earlier is native, we shouldn't get stuff like "USD 15.76"
     eq_(pview.istatement.income[0].cash_flow, '12.00')
 
-#--- One empty account EUR
+# --- One empty account EUR
 def app_one_empty_account_eur(monkeypatch):
     monkeypatch.patch_today(2008, 5, 25)
     app = TestApp()
@@ -116,7 +115,7 @@ class TestCaseCADAssetAndUSDAsset:
         app.add_account('USD Account', USD)
         app.show_account()
         self.app = app
-    
+
     def test_make_amount_native(self, fake_server):
         # Making an amount native when the both sides are asset/liability creates a MCT
         # First, let's add a 'native' transaction
@@ -134,7 +133,7 @@ class TestCaseCADAssetAndUSDAsset:
         app.bsheet.selected = app.bsheet.assets[1]
         app.show_account()
         eq_(app.etable[0].increase, '42.00')
-    
+
 
 class TestCaseCADLiabilityAndUSDLiability:
     def setup_method(self, method):
@@ -143,7 +142,7 @@ class TestCaseCADLiabilityAndUSDLiability:
         app.add_account('USD Account', USD, account_type=AccountType.Liability)
         app.show_account()
         self.app = app
-    
+
     def test_make_amount_native(self, fake_server):
         # Making an amount native when the both sides are asset/liability creates a MCT
         # First, let's add a 'native' transaction
@@ -161,12 +160,13 @@ class TestCaseCADLiabilityAndUSDLiability:
         app.bsheet.selected = app.bsheet.liabilities[1]
         app.show_account()
         eq_(app.etable[0].increase, '42.00')
-    
 
-#--- Entry with foreign currency
-# 2 accounts (including one income), one entry. The entry has an amount that differs from the 
+
+# --- Entry with foreign currency
+# 2 accounts (including one income), one entry. The entry has an amount that differs from the
 # account's currency.
 def app_entry_with_foreign_currency():
+    PLN = Currency(code='PLN')
     app = TestApp()
     EUR.set_CAD_value(1.42, date(2007, 10, 1))
     PLN.set_CAD_value(0.42, date(2007, 10, 1))
@@ -231,7 +231,7 @@ class TestCaseCADAssetAndUSDIncome:
         app.show_account()
         app.add_entry(transfer='CAD Account', increase='42 usd')
         self.app = app
-    
+
     def test_make_amount_native(self, fake_server):
         # Making an amount native when the other side is an income/expense never creates a MCT
         # First, let's add a 'native' transaction
@@ -248,11 +248,11 @@ class TestCaseCADAssetAndUSDIncome:
         app.istatement.selected = app.istatement.income[0]
         app.show_account()
         eq_(app.etable[0].increase, 'CAD 40.00')
-    
+
 
 class TestCaseDifferentCurrencies:
     # 2 accounts. One with the default app currency and the other with another currency.
-    # 2 transactions. One with the default currency and one with a different currency. Both 
+    # 2 transactions. One with the default currency and one with a different currency. Both
     # transaction have a transfer to the second account.
     def setup_method(self, method):
         app = TestApp(app=Application(ApplicationGUI(), default_currency=CAD))
@@ -264,7 +264,7 @@ class TestCaseDifferentCurrencies:
         app.add_entry(description='first entry', transfer='second account', increase='42 usd')
         app.add_entry(description='second entry', transfer='second account', increase='42 eur')
         self.app = app
-    
+
     def test_save_load(self, fake_server):
         # make sure currency information is correctly saved/loaded
         app = self.app
@@ -272,7 +272,7 @@ class TestCaseDifferentCurrencies:
         newapp.doc.date_range = app.doc.date_range
         newapp.doc._cook()
         compare_apps(app.doc, newapp.doc)
-    
+
     def test_entries_amount(self, fake_server):
         # All entries have the appropriate currency.
         app = self.app
@@ -283,11 +283,11 @@ class TestCaseDifferentCurrencies:
         app.show_account()
         eq_(app.etable[0].decrease, 'USD 42.00')
         eq_(app.etable[1].decrease, 'EUR 42.00')
-    
 
-#--- Three currencies two entries
+
+# --- Three currencies two entries
 def app_three_currencies_two_entries(monkeypatch):
-    # Three account of different currencies, and 2 entries on differenet date. The app is saved, 
+    # Three account of different currencies, and 2 entries on differenet date. The app is saved,
     # and then loaded (The goal of this is to test that moneyguru ensures it got the rates it needs).
     monkeypatch.patch_today(2008, 4, 30)
     theapp = Application(ApplicationGUI(), default_currency=CAD)
@@ -306,7 +306,7 @@ def test_ensures_rates_multiple_currencies(app):
     db, log = set_ratedb_for_tests()
     app.save_and_load()
     expected = {
-        (date(2008, 4, 20), date(2008, 4, 29), 'USD'), 
+        (date(2008, 4, 20), date(2008, 4, 29), 'USD'),
         (date(2008, 4, 20), date(2008, 4, 29), 'EUR'),
     }
     eq_(set(log), expected)
@@ -326,7 +326,7 @@ def test_ensures_rates_async(app, monkeypatch):
     # way to test that (or increase the sleep time).
     rates_db, log = set_ratedb_for_tests(async=True, slow_down_provider=True)
     app.save_and_load()
-    # This is a weird way to test that we don't have the rate yet. No need to import fallback 
+    # This is a weird way to test that we don't have the rate yet. No need to import fallback
     # rates just for that.
     assert rates_db.get_rate(date(2008, 4, 20), 'USD', 'CAD') != 1.42
     for thread in threading.enumerate():
@@ -334,7 +334,7 @@ def test_ensures_rates_async(app, monkeypatch):
             thread.join(1)
     eq_(rates_db.get_rate(date(2008, 4, 20), 'USD', 'CAD'), 1.42)
 
-#--- Multi-currency transaction
+# --- Multi-currency transaction
 def app_multi_currency_transaction():
     app = TestApp()
     app.add_account('CAD Account', CAD)
@@ -350,16 +350,17 @@ def app_multi_currency_transaction():
     return app
 
 def test_add_imbalancing_split():
-    # Adding a split making one of the two currencies balance, while leaving the rest all on 
+    # Adding a split making one of the two currencies balance, while leaving the rest all on
     # the same side makes moneyGuru rebalance this.
     app = app_multi_currency_transaction()
-    app.tpanel.load()
-    app.stable.add()
-    row = app.stable.selected_row
+    tpanel = app.mw.edit_item()
+    stable = tpanel.split_table
+    stable.add()
+    row = stable.selected_row
     row.credit = '42 usd'
-    app.stable.save_edits() # Now we have CAD standing all alone
-    eq_(len(app.stable), 4)
-    eq_(app.stable[3].debit, 'CAD 40.00')
+    stable.save_edits() # Now we have CAD standing all alone
+    eq_(len(stable), 4)
+    eq_(stable[3].debit, 'CAD 40.00')
 
 def test_set_entry_increase():
     # If we set up the CAD side to be an increase, the USD side must switch to decrease
@@ -377,28 +378,30 @@ def test_set_split_to_logical_imbalance():
     # The first split is the USD entry (a debit). If we set it to be a credit instead, we end
     # up with both splits on the same side. We must create balancing splits.
     app = app_multi_currency_transaction()
-    app.tpanel.load()
-    app.stable.add()
-    app.stable[2].credit = '1 usd'
-    app.stable.save_edits()
-    app.stable[0].credit = '12 usd'
-    app.stable.save_edits()
-    eq_(len(app.stable), 4)
+    tpanel = app.mw.edit_item()
+    stable = tpanel.split_table
+    stable.add()
+    stable[2].credit = '1 usd'
+    stable.save_edits()
+    stable[0].credit = '12 usd'
+    stable.save_edits()
+    eq_(len(stable), 4)
     expected = set(['12.00', 'CAD 40.00'])
-    assert app.stable[2].debit in expected
-    assert app.stable[3].debit in expected
+    assert stable[2].debit in expected
+    assert stable[3].debit in expected
 
 class TestCaseEntryWithXPFAmount:
     def setup_method(self, method):
+        XPF = Currency(code='XPF')
         app = TestApp()
         XPF.set_CAD_value(0.42, date(2009, 7, 20))
         app.add_account('account', CAD)
         app.show_account()
         app.add_entry('20/07/2009', increase='100 XPF')
         self.app = app
-    
+
     def test_account_balance_is_correct(self, fake_server):
         # Because XPF has an exponent of 0, there was a bug where currency conversion wouldn't be
         # done correctly.
         eq_(self.app.etable[0].balance, 'CAD 42.00')
-    
+
